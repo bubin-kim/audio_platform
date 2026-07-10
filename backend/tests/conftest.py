@@ -18,9 +18,38 @@ from sqlalchemy.pool import StaticPool
 import app.background.worker as worker_module
 from app.api.deps import get_db, get_storage_dep
 from app.core.database import Base
+from app.hooks.events import (
+    on_dataset_exported,
+    on_processing_done,
+    on_project_created,
+    on_upload_complete,
+)
 import app.models  # noqa: F401  (모든 모델을 Base.metadata에 등록)
 from app.main import app
 from app.storage.local import LocalStorage
+
+_ALL_HOOKS = (
+    on_project_created,
+    on_upload_complete,
+    on_processing_done,
+    on_dataset_exported,
+)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_hooks():
+    """모든 테스트를 훅 구독자 0명 상태로 실행한다.
+
+    개발자 .env에 Notion 키가 있어도(= main.py import 시 구독자가 등록돼도)
+    기존 테스트가 외부 호출 없이 그대로 통과하게 하는 회귀 방지선(docs/07 §7).
+    Notion 테스트는 이 픽스처 이후 명시적으로 subscribe 한다.
+    """
+    saved = {h: list(h._subscribers) for h in _ALL_HOOKS}
+    for h in _ALL_HOOKS:
+        h.clear()
+    yield
+    for h, subs in saved.items():
+        h._subscribers = subs
 
 
 @pytest.fixture

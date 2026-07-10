@@ -50,3 +50,8 @@ app.include_router(datasets.router, prefix=settings.api_prefix)
 app.include_router(uploads.router, prefix=settings.api_prefix)
 app.include_router(processing.router, prefix=settings.api_prefix)
 app.include_router(stats.router, prefix=settings.api_prefix)
+
+# --- V2 플러그인 구독자 등록 (미설정 시 no-op — docs/07) ---
+from app.hooks.notion import register_notion_subscribers  # noqa: E402
+
+register_notion_subscribers()

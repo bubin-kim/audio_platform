@@ -45,6 +45,7 @@
 | API 입출력 형태(Pydantic) | `backend/app/schemas/` |
 | 저장소 구현 | `backend/app/storage/` |
 | 확장 훅 | `backend/app/hooks/` |
+| **외부 서비스 구독자(V2)** | `backend/app/hooks/` (예: `notion.py` — 토큰 없으면 no-op, docs/07) |
 | 프론트 백엔드 호출 | `frontend/lib/api.ts` (컴포넌트가 직접 fetch 금지) |
 
 - **models(ORM)와 schemas(Pydantic)를 절대 한 파일에 섞지 않는다.**
@@ -86,5 +87,11 @@
 
 ## 9. 현재 단계
 
-MVP 개발 중. 완료 기준: 업로드→자동커팅→메타/CSV→대시보드가 동작하고,
-**차량음이 아닌 다른 도메인을 설정만으로 새로 만들 수 있어야 한다**(재사용성 검증).
+**MVP 완료** (M1~M10, 재사용성 검증 통과 — 커밋 bdcbd12). 현재 **V2 진행 중**:
+- ✅ V2-1 Notion 연동 (docs/07): 프로젝트 생성→Notion row, 커팅 완료→요약 블록.
+  `hooks/notion.py` 구독자 방식 — **P4 첫 실증**: `.env`의 `NOTION_API_KEY`·
+  `NOTION_DATABASE_ID` 없으면 구독자 미등록 = MVP와 동일 동작.
+- 남은 V2 자리: Drive(Storage 교체), GitHub(Dataset 버전), AI Assistant, Auth.
+
+V2에서도 위 원칙(P1~P4)과 금지사항은 그대로 유효하다. 외부 서비스 구독자는
+반드시 hooks/에 두고, 실패가 본 흐름을 깨지 않게 한다.

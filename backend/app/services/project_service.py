@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.audio.cutting import available_strategies
 from app.core.exceptions import NotFoundError, ValidationError
+from app.hooks.events import on_project_created
 from app.models.project import Project
 from app.repositories.project_repo import ProjectRepository
 from app.schemas.project import ProjectCreate, ProjectUpdate
@@ -32,6 +33,8 @@ class ProjectService:
         self.repo.add(project)
         self.db.commit()
         self.db.refresh(project)
+        # 훅 발화 (V2: Notion이 구독 — docs/07 §5.1). 본 흐름을 막지 않는다.
+        on_project_created.emit(project_id=project.id)
         return project
 
     def get(self, project_id: int) -> Project:

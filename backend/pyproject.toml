@@ -16,12 +16,13 @@ dependencies = [
     "pydub>=0.25",
     "numpy>=1.26",
     "pandas>=2.2",
+    # V2: Notion REST API 호출 (hooks/notion.py). dev(TestClient)에서 런타임으로 승격.
+    "httpx>=0.27",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.3",
-    "httpx>=0.27",
 ]
 
 [tool.pytest.ini_options]

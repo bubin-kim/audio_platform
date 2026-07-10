@@ -36,6 +36,18 @@ class Settings(BaseSettings):
     # --- 로컬 저장소 경로 (V2: Drive로 대체되므로 Storage 인터페이스 경유) ---
     data_dir: Path = PROJECT_ROOT / "data"
 
+    # --- Notion 연동 (V2-1, docs/07 §3) ---
+    # 두 키가 모두 있어야 활성화. 없으면 구독자 미등록 = MVP와 동일 동작(P4).
+    notion_api_key: str = ""
+    notion_database_id: str = ""
+    notion_api_version: str = "2022-06-28"
+    notion_timeout_sec: float = 10.0
+
+    @property
+    def notion_enabled(self) -> bool:
+        """Notion 구독자를 등록할지 여부 (토큰 + DB id 둘 다 필요)."""
+        return bool(self.notion_api_key and self.notion_database_id)
+
     @property
     def uploads_dir(self) -> Path:
         return self.data_dir / "uploads"

@@ -23,6 +23,10 @@ class Hook:
     def subscribe(self, callback: Callable[..., Any]) -> None:
         self._subscribers.append(callback)
 
+    def clear(self) -> None:
+        """구독자 전부 해제. 테스트 격리용(운영 코드에서는 쓰지 않는다)."""
+        self._subscribers.clear()
+
     def emit(self, **payload: Any) -> None:
         for callback in self._subscribers:
             try:
@@ -31,7 +35,8 @@ class Hook:
                 logger.exception("hook '%s' 구독자 실행 실패", self.name)
 
 
-# --- MVP의 훅 지점 (구독자 없음) ---
+# --- 훅 지점 (V2에서 hooks/notion.py 가 일부 구독) ---
+on_project_created = Hook("on_project_created")  # V2-1 신설 (docs/07 §2)
 on_upload_complete = Hook("on_upload_complete")
 on_processing_done = Hook("on_processing_done")
 on_dataset_exported = Hook("on_dataset_exported")
