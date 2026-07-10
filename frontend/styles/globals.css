@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Grayish-Blue 미니멀 톤. 색상은 tailwind.config.ts 토큰으로 관리한다. */
+body {
+  @apply bg-surface text-content;
+}

@@ -1,0 +1,33 @@
+# --- 데이터 (오디오 산출물, 코드 아님 — V2에서 Drive로 대체) ---
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+.python-version
+
+# --- 환경변수 (예시만 커밋) ---
+.env
+.env.local
+frontend/.env.local
+
+# --- Node / Next.js ---
+node_modules/
+frontend/.next/
+frontend/out/
+npm-debug.log*
+
+# --- OS / 에디터 ---
+.DS_Store
+.idea/
+.vscode/
+
+# --- Claude Code 로컬 설정 (머신 전용, 공유 안 함) ---
+.claude/settings.local.json

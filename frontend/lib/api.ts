@@ -1,0 +1,147 @@
+/**
+ * 백엔드 REST 호출 모음 — 모든 fetch는 여기 한 곳에 집중한다(03 §2).
+ * 컴포넌트는 이 모듈의 함수만 부르고, 직접 fetch 하지 않는다.
+ * 주소가 바뀌어도 이 파일만 고치면 된다.
+ */
+
+import type {
+  Dataset,
+  DatasetCreate,
+  Job,
+  Page,
+  ProcessRequest,
+  Project,
+  ProjectCreate,
+  Segment,
+  StatsResponse,
+  UploadResult,
+} from "@/lib/types";
+
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+
+/** 공통 요청 헬퍼. 에러 응답(ErrorResponse)을 표준화해 던진다.
+ *
+ * 대시보드류 데이터는 자주 바뀌므로 기본은 캐시하지 않는다(no-store).
+ * FormData 바디는 브라우저가 boundary를 채운 Content-Type을 스스로 붙이도록
+ * 기본 JSON 헤더를 건너뛴다.
+ */
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const isFormData = init?.body instanceof FormData;
+  const res = await fetch(`${API_BASE}${path}`, {
+    cache: "no-store",
+    ...init,
+    headers: isFormData
+      ? init?.headers
+      : { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(detail.detail ?? `Request failed: ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+function qs(params: Record<string, string | number | undefined>): string {
+  const entries = Object.entries(params).filter(([, v]) => v !== undefined);
+  if (entries.length === 0) return "";
+  return `?${new URLSearchParams(entries as [string, string][]).toString()}`;
+}
+
+// --- 헬스체크 ---
+export function getHealth(): Promise<{ status: string }> {
+  const base = API_BASE.replace(/\/api$/, "");
+  return fetch(`${base}/health`, { cache: "no-store" }).then((r) => r.json());
+}
+
+// --- Project ---
+export const listProjects = (params?: { limit?: number; offset?: number }) =>
+  request<Page<Project>>(`/projects${qs(params ?? {})}`);
+
+export const getProject = (id: number) => request<Project>(`/projects/${id}`);
+
+export const createProject = (body: ProjectCreate) =>
+  request<Project>("/projects", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export const updateProject = (id: number, body: Partial<ProjectCreate>) =>
+  request<Project>(`/projects/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+
+// --- Dataset ---
+export const listDatasets = (
+  projectId: number,
+  params?: { limit?: number; offset?: number },
+) => request<Page<Dataset>>(`/projects/${projectId}/datasets${qs(params ?? {})}`);
+
+export const createDataset = (projectId: number, body: DatasetCreate) =>
+  request<Dataset>(`/projects/${projectId}/datasets`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export const getDataset = (id: number) => request<Dataset>(`/datasets/${id}`);
+
+export const listSegments = (
+  datasetId: number,
+  params?: { limit?: number; offset?: number },
+) => request<Page<Segment>>(`/datasets/${datasetId}/segments${qs(params ?? {})}`);
+
+/** 개별 세그먼트 라벨 예외 보정 (06_API.md §8) — 기존 라벨 위에 부분 덮어쓰기. */
+export const updateSegmentLabels = (
+  segmentId: number,
+  labels: Record<string, unknown>,
+) =>
+  request<Segment>(`/segments/${segmentId}/labels`, {
+    method: "PATCH",
+    body: JSON.stringify({ labels }),
+  });
+
+/** 세그먼트 오디오는 브라우저 <audio>가 직접 스트리밍하는 URL이다. */
+export const segmentAudioUrl = (segmentId: number) =>
+  `${API_BASE}/segments/${segmentId}/audio`;
+
+// --- Upload ---
+export const uploadFiles = (
+  projectId: number,
+  files: File[],
+  datasetId?: number,
+): Promise<UploadResult> => {
+  const form = new FormData();
+  form.set("project_id", String(projectId));
+  if (datasetId !== undefined) form.set("dataset_id", String(datasetId));
+  for (const f of files) form.append("files", f);
+  return request<UploadResult>("/uploads", { method: "POST", body: form });
+};
+
+// --- Processing / Job ---
+export const startProcessing = (datasetId: number, body?: ProcessRequest) =>
+  request<Job>(`/datasets/${datasetId}/process`, {
+    method: "POST",
+    body: JSON.stringify(body ?? {}),
+  });
+
+export const getJob = (id: number) => request<Job>(`/jobs/${id}`);
+
+export const listJobs = (
+  datasetId: number,
+  params?: { limit?: number; offset?: number },
+) => request<Page<Job>>(`/datasets/${datasetId}/jobs${qs(params ?? {})}`);
+
+// --- Export ---
+export const startExport = (datasetId: number) =>
+  request<Job>(`/datasets/${datasetId}/export`);
+
+/** 다운로드는 JSON 왕복이 아니라 브라우저가 직접 여는 URL이다(<a href>). */
+export const downloadExportUrl = (datasetId: number) =>
+  `${API_BASE}/datasets/${datasetId}/export/download`;
+
+// --- Stats ---
+export const getStats = (projectId?: number) =>
+  request<StatsResponse>(`/stats${qs({ project_id: projectId })}`);
+
+export { request };
