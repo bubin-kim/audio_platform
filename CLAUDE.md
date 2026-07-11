@@ -54,9 +54,11 @@
 | 07_notion_integration.md | V2-1 Notion 연동 설계 | Notion 훅 작업 시 |
 | 08_cutting_tuning.md | silence_based 튜닝 가이드 | 커팅 품질 문제 시 |
 | 09_drive_integration.md | V2-3 Drive 미러링 설계·마일스톤 | Drive 작업 시 |
+| 10_reprocessing_labels.md | V2-4 재처리 안전장치(409 가드·라벨 승계) 설계 | 재커팅/라벨 흐름 변경 전 |
+| 11_csv_export.md | V2-5 CSV export(경로 패턴·출처 컬럼·반올림) 설계 | export 형식 변경 전 |
 
-큰 기능은 이 패턴을 따른다: **설계 문서(docs/0N)를 먼저 쓰고 사용자 승인 → 문서대로 구현**
-(06→MVP, 07→V2-1, 09→V2-3 전부 이렇게 진행됨).
+큰 기능은 이 패턴을 따른다: **설계 문서(docs/NN)를 먼저 쓰고 사용자 승인 → 문서대로 구현**
+(06→MVP, 07→V2-1, 09→V2-3, 10→V2-4, 11→V2-5 전부 이렇게 진행됨).
 
 ## 5. 폴더 배치 규칙 (`docs/03_structure.md`와 일치)
 
