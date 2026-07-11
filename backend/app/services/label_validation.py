@@ -43,7 +43,20 @@ def validate_labels(label_schema: list[dict[str, Any]], labels: dict[str, Any]) 
                 )
 
 
+def _is_filled(value: Any) -> bool:
+    """라벨 값이 '실제로 채워졌는지'. None과 빈/공백 문자열은 미충족."""
+    if value is None:
+        return False
+    if isinstance(value, str) and value.strip() == "":
+        return False
+    return True
+
+
 def compute_is_labeled(label_schema: list[dict[str, Any]], labels: dict[str, Any]) -> bool:
-    """모든 required 필드가 채워졌는지로 is_labeled를 계산한다."""
+    """모든 required 필드가 채워졌는지로 is_labeled를 계산한다.
+
+    빈 문자열("")은 미충족이다 — 라벨링 진행률이 실제보다 낙관적으로 보이는 것을 막는다.
+    (0, False 같은 값은 유효한 라벨 값이므로 충족으로 본다.)
+    """
     required_keys = [f["key"] for f in label_schema if f.get("required")]
-    return all(labels.get(k) is not None for k in required_keys)
+    return all(_is_filled(labels.get(k)) for k in required_keys)
