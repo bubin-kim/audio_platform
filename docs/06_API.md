@@ -204,10 +204,16 @@ Dataset의 SourceFile들을 Project 설정의 `cutting_mode`로 커팅한다. **
 {
   "source_file_ids": [5],
   "params_override": null,
-  "common_labels": { "distance_m": 10, "direction": "N" }
+  "common_labels": { "distance_m": 10, "direction": "N" },
+  "replace_existing": false,
+  "inherit_labels": true
 }
 ```
 - 바디 없이 호출하면 Dataset의 모든 SourceFile을 Project 기본 설정으로 처리.
+- **재처리 안전장치 (docs/10)**: 대상 원본에 기존 세그먼트가 있으면
+  `replace_existing=true` 없이는 **409**로 거부한다(암묵적 라벨 손실·중복 누적 방지).
+  대체 시 `inherit_labels=true`(기본)면 기존 라벨을 **시간 겹침 매칭으로 승계**하고,
+  `common_labels`는 승계 라벨 위에 덮어쓴다. 두 플래그는 Job.params에 기록된다.
 - `params_override`(선택): 이번 Job에 한해 `cutting_params`를 덮어씀(재현성 위해 Job.params에 기록).
 - `common_labels`(선택): 이번 커팅으로 생성되는 **모든 Segment에 일괄 부여할 공통 라벨**.
   각 Segment의 `labels`에 그대로 채워지고, `is_labeled`도 이 값 기준으로 계산된다.

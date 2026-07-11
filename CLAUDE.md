@@ -153,7 +153,9 @@ cd frontend && npm run build          # 프론트 타입체크 + 빌드
   (MirrorStorage: exports/ 비동기 미러·덮어쓰기 확인. wav 미러는 `.env`의
   `DRIVE_MIRROR_PREFIXES`에 `segments` 추가만으로 활성화. 설계: docs/09)
 - ✅ **UI**: 라벨링 진행률 원형 게이지 + 세그먼트 미니 파형(커팅 시각 비교) — `97a130f`
-- **최신 마일스톤 커밋**: `97a130f`
+- ✅ **V2-4**: 재처리 안전장치 완료 (409 가드 + 라벨 승계, 설계 docs/10) — is_labeled
+  빈문자열 수정 `26d23cb` 포함. 사고 시나리오(p03 소실) 실검증 통과 2026-07-12
+- **최신 마일스톤 커밋**: `a7310ad` (V2-4)
 - 남은 V2 자리: GitHub(Dataset 버전), AI Assistant, Auth.
 
 ## 12. 하지 말 것 (Don'ts)

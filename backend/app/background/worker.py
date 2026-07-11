@@ -90,11 +90,12 @@ def _run(
     common_labels = params.get("common_labels") or {}
     label_schema = params.get("label_schema") or []
     source_file_ids: list[int] = params["source_file_ids"]
+    replace_existing: bool = params.get("replace_existing", False)
+    inherit: bool = params.get("inherit_labels", True)
 
     # naming_pattern에서 쓸 수 있는 공통 값(공통 라벨 + 오늘 날짜).
     # seq는 이 Job 전체에 걸친 연속 번호(재현성 있는 순서).
     base_values = {**common_labels, "date": date.today().strftime("%Y%m%d")}
-    is_labeled = compute_is_labeled(label_schema, common_labels)
 
     seq = 1
     with tempfile.TemporaryDirectory(prefix="cutting_job_") as tmp_dir:
@@ -104,6 +105,24 @@ def _run(
             if source is None:
                 continue
             local_source_path = storage.local_path(source.storage_path)
+
+            # 재처리(docs/10 §3): 스냅샷 → 기존 세그먼트 삭제(DB+Storage) → 커팅.
+            snapshot: list[dict] = []
+            if replace_existing:
+                old_segments = segment_repo.list_by_source_file(source.id)
+                if inherit:
+                    snapshot = [
+                        {
+                            "start": s.source_start_sec,
+                            "end": s.source_start_sec + s.duration_sec,
+                            "labels": dict(s.labels or {}),
+                        }
+                        for s in old_segments
+                    ]
+                for old in old_segments:
+                    storage.delete(old.storage_path)
+                    segment_repo.delete(old)
+                db.commit()
 
             for seg_audio in strategy.cut(local_source_path, cutting_params):
                 values = {**base_values, "seq": seq}
@@ -115,6 +134,13 @@ def _run(
                 logical_path = f"segments/{job.dataset_id}/{filename}"
                 storage.save_from_path(logical_path, tmp_file)
                 tmp_file.unlink(missing_ok=True)
+
+                # 라벨 = 승계(겹침 매칭, 스키마 재검증) 위에 common_labels 덮어쓰기.
+                inherited = _match_inherited_labels(
+                    snapshot, seg_audio.start_sec, seg_audio.end_sec
+                )
+                inherited = _sanitize_inherited(label_schema, inherited)
+                labels = {**inherited, **common_labels}
 
                 meta = extract_metadata(storage.local_path(logical_path))
                 segment_repo.add(
@@ -130,13 +156,53 @@ def _run(
                         file_size=meta.file_size,
                         format=meta.format,
                         source_start_sec=seg_audio.start_sec,
-                        labels=common_labels,
-                        is_labeled=is_labeled,
+                        labels=labels,
+                        is_labeled=compute_is_labeled(label_schema, labels),
                     )
                 )
                 job.progress += 1
                 db.commit()  # 진행률을 폴링에서 즉시 볼 수 있도록 매 세그먼트 커밋
                 seq += 1
+
+
+def _match_inherited_labels(
+    snapshot: list[dict], start: float, end: float
+) -> dict:
+    """새 구간 [start, end)에 승계할 라벨을 스냅샷에서 고른다 (docs/10 §4).
+
+    시간 겹침이 가장 큰 옛 조각의 라벨을 쓴다. 동률이면 새 조각의 중점을
+    포함하는 쪽. 겹침이 전혀 없으면 빈 dict(옛 조각이 없던 구간).
+    순수 함수 — 단독 테스트 가능.
+    """
+    best: dict = {}
+    best_key: tuple[float, bool] = (0.0, False)
+    mid = (start + end) / 2
+    for item in snapshot:
+        overlap = min(end, item["end"]) - max(start, item["start"])
+        if overlap <= 0:
+            continue
+        key = (overlap, item["start"] <= mid < item["end"])
+        if key > best_key:
+            best, best_key = item["labels"], key
+    return dict(best)
+
+
+def _sanitize_inherited(label_schema: list[dict], labels: dict) -> dict:
+    """승계 라벨을 현재 스키마로 재검증 — 위반 키만 제외하고 로그 (docs/10 §4).
+
+    재처리 사이에 label_schema가 바뀌었을 수 있으므로 키 단위로 걸러낸다.
+    """
+    from app.core.exceptions import ValidationError
+    from app.services.label_validation import validate_labels
+
+    clean: dict = {}
+    for key, value in labels.items():
+        try:
+            validate_labels(label_schema, {key: value})
+            clean[key] = value
+        except ValidationError:
+            logger.warning("승계 라벨 '%s'=%r 가 현재 스키마와 맞지 않아 제외", key, value)
+    return clean
 
 
 def run_export_job(job_id: int) -> None:

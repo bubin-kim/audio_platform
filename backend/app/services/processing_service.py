@@ -15,6 +15,7 @@ from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.job import Job
 from app.repositories.dataset_repo import DatasetRepository
 from app.repositories.job_repo import JobRepository
+from app.repositories.segment_repo import SegmentRepository
 from app.repositories.source_file_repo import SourceFileRepository
 from app.schemas.job import ProcessRequest
 from app.services.label_validation import validate_labels
@@ -26,6 +27,7 @@ class ProcessingService:
         self.dataset_repo = DatasetRepository(db)
         self.source_repo = SourceFileRepository(db)
         self.job_repo = JobRepository(db)
+        self.segment_repo = SegmentRepository(db)
 
     def start_cutting(self, dataset_id: int, req: ProcessRequest) -> Job:
         dataset = self.dataset_repo.get(dataset_id)
@@ -51,6 +53,23 @@ class ProcessingService:
         if not source_files:
             raise ValidationError("커팅할 SourceFile이 없습니다.")
 
+        # 재처리 가드 (docs/10 §3): 기존 세그먼트가 있는데 대체 선언이 없으면 409.
+        # 암묵적 라벨 손실(G1)과 중복 누적(G2)을 모두 막는다.
+        if not req.replace_existing:
+            existing = [
+                seg
+                for sf in source_files
+                for seg in self.segment_repo.list_by_source_file(sf.id)
+            ]
+            if existing:
+                labeled = sum(1 for s in existing if s.is_labeled)
+                raise ConflictError(
+                    f"대상 원본에 기존 세그먼트 {len(existing)}개"
+                    f"(라벨 있는 것 {labeled}개)가 있습니다. "
+                    "replace_existing=true로 대체(라벨은 기본 승계)하거나, "
+                    "보존이 필요하면 새 Dataset을 만들어 커팅하세요."
+                )
+
         cutting_params = {**project.cutting_params, **(req.params_override or {})}
 
         params: dict[str, Any] = {
@@ -60,6 +79,9 @@ class ProcessingService:
             "label_schema": project.label_schema,
             "common_labels": req.common_labels,
             "source_file_ids": [s.id for s in source_files],
+            # 재현성: 이 실행의 재처리 정책을 기록 (docs/10 §2.3)
+            "replace_existing": req.replace_existing,
+            "inherit_labels": req.inherit_labels,
         }
         job = Job(
             dataset_id=dataset_id,

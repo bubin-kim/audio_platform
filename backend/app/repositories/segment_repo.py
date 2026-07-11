@@ -41,6 +41,15 @@ class SegmentRepository(BaseRepository[Segment]):
         self.db.flush()
         return objs
 
+    def list_by_source_file(self, source_file_id: int) -> list[Segment]:
+        """특정 원본에서 나온 세그먼트 전량 (재처리 스냅샷·삭제용, docs/10)."""
+        stmt = (
+            select(Segment)
+            .where(Segment.source_file_id == source_file_id)
+            .order_by(Segment.id.asc())
+        )
+        return list(self.db.scalars(stmt).all())
+
     def all_for_dataset(self, dataset_id: int) -> list[Segment]:
         """CSV/통계용: 페이지네이션 없이 전량 조회."""
         stmt = (
