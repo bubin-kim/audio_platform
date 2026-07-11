@@ -60,12 +60,47 @@ def test_build_metadata_csv_includes_dynamic_label_columns() -> None:
         labels={"distance_m": 10, "direction": "N"},
         is_labeled=True,
     )
-    csv_text = build_metadata_csv([seg], label_keys=["distance_m", "direction"])
+    csv_text = build_metadata_csv(
+        [seg],
+        label_keys=["distance_m", "direction"],
+        project_name="차량음",
+        dataset_name="v1",
+        dataset_version="v1",
+    )
     rows = list(csv.DictReader(io.StringIO(csv_text)))
     assert len(rows) == 1
     assert rows[0]["filename"] == "a.wav"
     assert rows[0]["distance_m"] == "10"
     assert rows[0]["direction"] == "N"
+    # 출처 컬럼(docs/11 §4) — 모든 행에 동일하게 실린다
+    assert rows[0]["project_name"] == "차량음"
+    assert rows[0]["dataset_name"] == "v1"
+    assert rows[0]["dataset_version"] == "v1"
+
+
+def test_build_metadata_csv_rounds_float_columns() -> None:
+    """실수 컬럼은 소수점 3자리(1ms)로 반올림 — 표현 계층에서만 (docs/11 §3)."""
+    seg = Segment(
+        id=1,
+        dataset_id=1,
+        filename="a.wav",
+        storage_path="segments/1/a.wav",
+        duration_sec=0.36002267573696145,
+        sample_rate=44100,
+        channels=1,
+        bit_depth=16,
+        file_size=1000,
+        format="wav",
+        source_start_sec=1.2300000000000002,
+        labels={},
+        is_labeled=False,
+    )
+    csv_text = build_metadata_csv(
+        [seg], label_keys=[], project_name="p", dataset_name="d", dataset_version="v1"
+    )
+    rows = list(csv.DictReader(io.StringIO(csv_text)))
+    assert rows[0]["duration_sec"] == "0.36"
+    assert rows[0]["source_start_sec"] == "1.23"
 
 
 def test_build_metadata_csv_missing_label_is_blank() -> None:
@@ -84,7 +119,10 @@ def test_build_metadata_csv_missing_label_is_blank() -> None:
         labels={},
         is_labeled=False,
     )
-    csv_text = build_metadata_csv([seg], label_keys=["distance_m"])
+    csv_text = build_metadata_csv(
+        [seg], label_keys=["distance_m"],
+        project_name="p", dataset_name="d", dataset_version="v1",
+    )
     rows = list(csv.DictReader(io.StringIO(csv_text)))
     assert rows[0]["distance_m"] == ""
 
@@ -108,6 +146,24 @@ def _make_project(db: Session) -> Project:
 def test_start_export_missing_dataset_404(db: Session) -> None:
     with pytest.raises(NotFoundError):
         DatasetService(db).start_export(999)
+
+
+def test_start_export_rejects_unknown_pattern_field(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """EXPORT_PATH_PATTERN에 지원하지 않는 필드가 있으면 fail-fast 400 (docs/11 §2)."""
+    import app.services.dataset_service as ds_module
+    from app.core.config import Settings
+    from app.core.exceptions import ValidationError
+
+    p = _make_project(db)
+    d = DatasetRepository(db).add(Dataset(project_id=p.id, name="v1"))
+    db.commit()
+
+    bad = Settings(_env_file=None, export_path_pattern="exports/{nope}/{date}.csv")
+    monkeypatch.setattr(ds_module, "get_settings", lambda: bad)
+    with pytest.raises(ValidationError, match="nope"):
+        DatasetService(db).start_export(d.id)
 
 
 def test_start_export_conflict_when_already_running(db: Session) -> None:
@@ -146,13 +202,22 @@ def test_export_runs_end_to_end(
     job_after = client.get(f"/api/jobs/{job['id']}").json()
     assert job_after["status"] == "done", job_after
     assert job_after["progress"] == 3  # 3초 / 1초 간격 = 3조각
-    assert job_after["result_path"] == f"exports/{dataset_id}/metadata.csv"
+    # 경로 패턴(docs/11 §2): exports/{project}/{date}_{dataset}.csv
+    from datetime import date as _date
+
+    today = _date.today().strftime("%Y%m%d")
+    assert (
+        job_after["result_path"] == f"exports/차량음/{today}_v1 초기수집.csv"
+    )
+    assert job_after["params"]["export_path_pattern"].startswith("exports/")
 
     csv_bytes = client._storage.read(job_after["result_path"])
     rows = list(csv.DictReader(io.StringIO(csv_bytes.decode("utf-8"))))
     assert len(rows) == 3
     assert rows[0]["distance_m"] == "10"
     assert rows[0]["is_labeled"] == "True"
+    assert rows[0]["project_name"] == "차량음"
+    assert rows[0]["duration_sec"] == "1.0"  # 반올림된 표현
 
 
 def test_export_missing_dataset_404(client: TestClient) -> None:

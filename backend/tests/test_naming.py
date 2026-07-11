@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.audio.naming import pattern_fields, render_filename
+from app.audio.naming import pattern_fields, render_filename, render_path
 
 
 def test_render_basic_with_seq_format() -> None:
@@ -49,3 +49,41 @@ def test_pattern_fields_extraction() -> None:
     assert pattern_fields("{date}_{model}_{seq:03d}") == ["date", "model", "seq"]
     # 중복 제거
     assert pattern_fields("{a}_{a}_{b}") == ["a", "b"]
+
+
+# --- render_path (export 경로 패턴, docs/11 §2) ---
+
+
+def test_render_path_basic_korean_preserved() -> None:
+    path = render_path(
+        "exports/{project}/{date}_{dataset}.csv",
+        {"project": "심음데이터수집", "date": "20260712", "dataset": "v1 초기수집"},
+    )
+    assert path == "exports/심음데이터수집/20260712_v1 초기수집.csv"
+
+
+def test_render_path_value_slash_cannot_change_structure() -> None:
+    """값 안의 슬래시는 _로 — 값이 디렉터리 구조를 바꿀 수 없다."""
+    path = render_path(
+        "exports/{project}/{dataset}.csv",
+        {"project": "차량/A팀", "dataset": "v1"},
+    )
+    assert path == "exports/차량_A팀/v1.csv"
+    assert path.count("/") == 2  # 패턴의 슬래시만
+
+
+def test_render_path_illegal_chars_sanitized() -> None:
+    path = render_path("exports/{project}/x.csv", {"project": 'a:b*c?"d'})
+    assert path == "exports/a_b_c__d/x.csv"
+
+
+def test_render_path_missing_value_raises() -> None:
+    with pytest.raises(ValueError, match="필요한 값이 없습니다"):
+        render_path("exports/{project}/{date}.csv", {"project": "p"})
+
+
+def test_render_path_numeric_values() -> None:
+    path = render_path(
+        "exports/{project_id}/{dataset_id}.csv", {"project_id": 3, "dataset_id": 5}
+    )
+    assert path == "exports/3/5.csv"

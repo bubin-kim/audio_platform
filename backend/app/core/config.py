@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     drive_mirror_prefixes: list[str] = ["exports"]
     drive_timeout_sec: float = 30.0
 
+    # --- CSV export 경로 패턴 (V2-5, docs/11 §2) ---
+    # 플레이스홀더: {project} {dataset} {version} {date} {project_id} {dataset_id}
+    # exports/ 밖으로 바꾸면 Drive 미러(DRIVE_MIRROR_PREFIXES) 대상에서 벗어남에 주의.
+    export_path_pattern: str = "exports/{project}/{date}_{dataset}.csv"
+
     @property
     def drive_enabled(self) -> bool:
         """Drive 미러를 켤지 여부 (OAuth 3종 + 루트 폴더 ID 모두 필요)."""

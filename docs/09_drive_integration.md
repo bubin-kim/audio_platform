@@ -17,7 +17,8 @@
 1. **CSV 미러 백업**: `exports/`(metadata.csv)가 로컬에 저장될 때마다 Drive의 지정 폴더에
    **비동기로 복사**된다. 같은 이름은 덮어쓰기(재export 시 최신본 유지), 삭제도 미러.
 2. **폴더 구조**: Drive 루트 폴더 아래 **논리 경로 그대로** —
-   `{루트}/exports/{dataset_id}/metadata.csv`.
+   기본 패턴 기준 `{루트}/exports/{프로젝트명}/{날짜}_{데이터셋명}.csv`
+   (경로 패턴은 `EXPORT_PATH_PATTERN` 설정, docs/11 §2).
 
 ### 안 하는 것 (비목표)
 - **세그먼트 wav(`segments/`) 미러** — 플랫폼에서 이미 재생 가능하므로 백업 필요성이 낮고,

@@ -10,7 +10,9 @@ import io
 
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import ConflictError, NotFoundError
+from app.audio.naming import pattern_fields
+from app.core.config import get_settings
+from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.dataset import Dataset
 from app.models.job import Job
 from app.models.segment import Segment
@@ -20,7 +22,9 @@ from app.repositories.project_repo import ProjectRepository
 from app.repositories.segment_repo import SegmentRepository
 from app.schemas.dataset import DatasetCreate
 
-# 자동 추출 메타데이터 컬럼(고정) + 라벨 컬럼(Project.label_schema에서 동적으로 붙는다, P1).
+# 출처 컬럼(자기서술, docs/11 §4) + 자동 추출 메타데이터 컬럼(고정)
+# + 라벨 컬럼(Project.label_schema에서 동적으로 붙는다, P1).
+_PROVENANCE_COLUMNS = ["project_name", "dataset_name", "dataset_version"]
 _METADATA_COLUMNS = [
     "id",
     "filename",
@@ -35,29 +39,44 @@ _METADATA_COLUMNS = [
     "is_labeled",
     "created_at",
 ]
+# CSV 표현에서만 반올림하는 실수 컬럼 (DB는 원본 정밀도 유지, docs/11 §3)
+_ROUND_SEC_DIGITS = 3
 
 
-def build_metadata_csv(segments: list[Segment], label_keys: list[str]) -> str:
-    """Segment 목록 → Metadata.csv 문자열(F5). 라벨 컬럼은 label_schema 순서로 펼친다.
+def build_metadata_csv(
+    segments: list[Segment],
+    label_keys: list[str],
+    *,
+    project_name: str,
+    dataset_name: str,
+    dataset_version: str,
+) -> str:
+    """Segment 목록 → Metadata.csv 문자열(F5).
 
-    도메인 분기 없음(P1): label_keys는 호출자가 Project.label_schema에서 넘겨준다.
+    - 선두 3컬럼(project/dataset/version)으로 파일 자체가 출처를 말한다 —
+      파일을 옮겨도, 여러 CSV를 concat해도 구분이 유지된다(docs/11 §4).
+    - 실수 컬럼은 소수점 3자리(1ms)로 반올림 — 표현 계층에서만(docs/11 §3).
+    - 도메인 분기 없음(P1): label_keys는 호출자가 Project.label_schema에서 넘겨준다.
     """
-    fieldnames = [*_METADATA_COLUMNS, *label_keys]
+    fieldnames = [*_PROVENANCE_COLUMNS, *_METADATA_COLUMNS, *label_keys]
     buf = io.StringIO()
     writer = csv.DictWriter(buf, fieldnames=fieldnames)
     writer.writeheader()
     for seg in segments:
         row = {
+            "project_name": project_name,
+            "dataset_name": dataset_name,
+            "dataset_version": dataset_version,
             "id": seg.id,
             "filename": seg.filename,
             "storage_path": seg.storage_path,
-            "duration_sec": seg.duration_sec,
+            "duration_sec": round(seg.duration_sec, _ROUND_SEC_DIGITS),
             "sample_rate": seg.sample_rate,
             "channels": seg.channels,
             "bit_depth": seg.bit_depth,
             "file_size": seg.file_size,
             "format": seg.format,
-            "source_start_sec": seg.source_start_sec,
+            "source_start_sec": round(seg.source_start_sec, _ROUND_SEC_DIGITS),
             "is_labeled": seg.is_labeled,
             "created_at": seg.created_at.isoformat() if seg.created_at else "",
             **{key: seg.labels.get(key, "") for key in label_keys},
@@ -114,14 +133,36 @@ class DatasetService:
         if self.project_repo.get(project_id) is None:
             raise NotFoundError(f"Project {project_id}를 찾을 수 없습니다.")
 
+    # export 경로 패턴이 쓸 수 있는 필드 (docs/11 §2 — worker가 채운다)
+    _EXPORT_PATTERN_FIELDS = {
+        "project", "dataset", "version", "date", "project_id", "dataset_id",
+    }
+
     def start_export(self, dataset_id: int) -> Job:
         """CSV export Job을 큐에 넣는다. 실제 생성은 worker가 한다."""
         self.get(dataset_id)  # 존재 확인(404)
+
+        # fail-fast: 경로 패턴의 필드가 전부 지원되는지 (docs/11 §2)
+        pattern = get_settings().export_path_pattern
+        unknown = [
+            f for f in pattern_fields(pattern)
+            if f not in self._EXPORT_PATTERN_FIELDS
+        ]
+        if unknown:
+            raise ValidationError(
+                f"EXPORT_PATH_PATTERN '{pattern}'에 알 수 없는 필드 {unknown}. "
+                f"사용 가능: {sorted(self._EXPORT_PATTERN_FIELDS)}"
+            )
+
         if self.job_repo.has_running(dataset_id, "export"):
             raise ConflictError(
                 f"Dataset {dataset_id}에 이미 진행 중인 export Job이 있습니다."
             )
-        job = Job(dataset_id=dataset_id, type="export", status="queued", params={})
+        # 재현성: 실행 당시 패턴을 Job에 기록
+        job = Job(
+            dataset_id=dataset_id, type="export", status="queued",
+            params={"export_path_pattern": pattern},
+        )
         self.job_repo.add(job)
         self.db.commit()
         self.db.refresh(job)

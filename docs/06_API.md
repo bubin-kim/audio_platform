@@ -140,8 +140,13 @@
 - `bit_depth`는 압축 포맷에서 **null 가능**(05 검토 결과).
 
 ### 4.3 GET `/api/datasets/{id}/export` — CSV 내보내기(비동기)
-Dataset의 모든 Segment를 `data/exports/`에 Metadata.csv로 생성. 큰 데이터셋 대비 **Job으로 처리**.
+Dataset의 모든 Segment를 CSV로 생성. 큰 데이터셋 대비 **Job으로 처리**.
 **응답 202 `JobRead`**(아래 §7). 완료 후 Job에 결과 경로 포함(`result_path`).
+- **경로는 설정 패턴** `EXPORT_PATH_PATTERN`(기본 `exports/{project}/{date}_{dataset}.csv`,
+  docs/11 §2)으로 결정 — 예: `exports/심음데이터수집/20260712_v1 초기수집.csv`.
+  지원하지 않는 필드가 패턴에 있으면 Job 시작 전 400(fail-fast). 사용 패턴은 Job.params에 기록.
+- **CSV 형식**(docs/11 §3·§4): 선두에 출처 3컬럼(`project_name`,`dataset_name`,`dataset_version`),
+  `duration_sec`·`source_start_sec`는 소수점 3자리 반올림(DB는 원본 정밀도 유지).
 > MVP 소규모에선 동기도 가능하나, 계약을 Job으로 통일해 V2 승격을 쉽게 한다.
 
 ### 4.4 GET `/api/datasets/{id}/export/download` — 최근 CSV 다운로드

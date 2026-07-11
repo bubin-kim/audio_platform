@@ -18,7 +18,8 @@ from sqlalchemy.orm import Session
 from app.audio.cutting import get_strategy
 from app.audio.io import write_wav
 from app.audio.metadata import extract_metadata
-from app.audio.naming import render_filename
+from app.audio.naming import render_filename, render_path
+from app.core.config import get_settings
 from app.core.database import SessionLocal
 from app.hooks.events import on_dataset_exported, on_processing_done
 from app.models.job import Job
@@ -254,13 +255,35 @@ def _run_export(
     if dataset is None:
         raise ValueError(f"Dataset {job.dataset_id}를 찾을 수 없습니다.")
 
-    label_keys = [f["key"] for f in dataset.project.label_schema]
+    project = dataset.project
+    label_keys = [f["key"] for f in project.label_schema]
     segments = segment_repo.all_for_dataset(job.dataset_id)
-    csv_text = build_metadata_csv(segments, label_keys)
+    csv_text = build_metadata_csv(
+        segments,
+        label_keys,
+        project_name=project.name,
+        dataset_name=dataset.name,
+        dataset_version=dataset.version,
+    )
 
-    logical_path = f"exports/{job.dataset_id}/metadata.csv"
+    # 경로는 설정 패턴으로 (docs/11 §2). 값 채우기는 DB를 아는 여기(worker)서 —
+    # Storage는 여전히 프로젝트를 모른다(P2). 패턴은 Job.params에 기록된 것을 쓴다(재현성).
+    pattern = job.params.get(
+        "export_path_pattern", get_settings().export_path_pattern
+    )
+    logical_path = render_path(
+        pattern,
+        {
+            "project": project.name,
+            "dataset": dataset.name,
+            "version": dataset.version,
+            "date": date.today().strftime("%Y%m%d"),
+            "project_id": project.id,
+            "dataset_id": dataset.id,
+        },
+    )
     with tempfile.TemporaryDirectory(prefix="export_job_") as tmp_dir:
-        tmp_file = Path(tmp_dir) / "metadata.csv"
+        tmp_file = Path(tmp_dir) / "export.csv"
         tmp_file.write_text(csv_text, encoding="utf-8")
         storage.save_from_path(logical_path, tmp_file)
 

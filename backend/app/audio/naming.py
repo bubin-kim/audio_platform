@@ -16,6 +16,13 @@ _FORMATTER = string.Formatter()
 _ILLEGAL = re.compile(r'[/\\:\*\?"<>\|\x00]')
 
 
+def _sanitize_component(value: str) -> str:
+    """경로 구성요소 하나를 안전하게 만든다: 위험 문자·선행 점 → '_', 빈 값 → '_'."""
+    safe = _ILLEGAL.sub("_", value).strip()
+    safe = safe.lstrip(".")
+    return safe or "_"
+
+
 def pattern_fields(pattern: str) -> list[str]:
     """패턴이 요구하는 필드명 목록(중복 제거, 등장 순서 유지).
 
@@ -57,3 +64,29 @@ def render_filename(
     if not safe.lower().endswith(f".{ext}"):
         safe = f"{safe}.{ext}"
     return safe
+
+
+def render_path(pattern: str, values: dict[str, Any]) -> str:
+    """경로 패턴을 값으로 채워 안전한 논리 경로를 만든다 (docs/11 §2).
+
+    - 패턴의 `/`는 디렉터리 구분자로 유지된다.
+    - 채워지는 **값 안의** 위험 문자(`/` 포함)는 `_`로 치환 — 값이 경로 구조를
+      바꿀 수 없다 (예: 프로젝트명 "차량/A팀" → "차량_A팀").
+    - 한글·공백은 유지. 필요한 값 누락은 명확한 ValueError.
+    """
+    safe_values = {
+        key: _sanitize_component(value) if isinstance(value, str) else value
+        for key, value in values.items()
+    }
+    try:
+        rendered = pattern.format(**safe_values)
+    except KeyError as exc:
+        raise ValueError(
+            f"경로 패턴에 필요한 값이 없습니다: {exc}. "
+            f"필요 필드={pattern_fields(pattern)}"
+        ) from exc
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f"경로 패턴을 적용할 수 없습니다: {exc}") from exc
+
+    parts = [part.strip() or "_" for part in rendered.split("/")]
+    return "/".join(parts)
