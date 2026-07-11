@@ -192,17 +192,20 @@ Service:  strategy = registry[project.cutting_mode]
 
 ## 6. 교체 가능한 부품 — Storage & DB 추상화 (P2)
 
-### 6.1 Storage Backend (Local → Drive)
+### 6.1 Storage Backend (Local → Drive) — ✅ V2-3에서 구현됨 (docs/09)
 ```
         ┌──────────────────────────┐
         │ StorageBackend (인터페이스) │  save(path, bytes) / read(path) / list()
         └────────────┬─────────────┘
-        ┌────────────┼──────────────┐
-        ▼                           ▼
- LocalStorage (MVP)          GoogleDriveStorage (V2, MCP)
+        ┌────────────┼─────────────────────┐
+        ▼                                  ▼
+ LocalStorage (MVP·주 저장소)      MirrorStorage (V2-3, 자격 설정 시)
+                                    = 로컬 동기 + GoogleDriveStorage 비동기 미러
+                                      (기본 exports/ 만, prefix는 설정)
 ```
-Service는 항상 `storage.save(...)`만 부른다. Local이든 Drive든 **부르는 코드는 똑같다.**
-→ V2에서 Drive 붙일 때 Service 수정 0.
+Service는 항상 `storage.save(...)`만 부른다. Local이든 Mirror든 **부르는 코드는 똑같다.**
+→ V2-3에서 Drive를 붙일 때 실제로 Service 수정 0이었다 (완전 교체 대신 미러를 택한
+이유·전환 로드맵은 docs/09 §1·§2).
 
 ### 6.2 DB (SQLite → PostgreSQL)
 - **SQLAlchemy(ORM)** 로 테이블을 파이썬 클래스로 다룬다 → 특정 SQL 방언에 안 묶임.

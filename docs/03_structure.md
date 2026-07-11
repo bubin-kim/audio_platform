@@ -79,8 +79,9 @@ backend/
 │   │
 │   ├── storage/             # ── [Storage Backend] 교체 가능한 저장소 ──
 │   │   ├── base.py              #   StorageBackend 인터페이스
-│   │   ├── local.py            #   LocalStorage (MVP)
-│   │   └── drive.py            #   (V2 자리) GoogleDriveStorage — MVP엔 빈 골격
+│   │   ├── local.py            #   LocalStorage (주 저장소)
+│   │   ├── drive.py            #   ★ V2-3 GoogleDriveStorage (Drive REST 미러, docs/09)
+│   │   └── mirror.py           #   ★ V2-3 MirrorStorage (로컬 동기 + Drive 비동기 미러)
 │   │
 │   ├── hooks/               # ── [확장 지점] 이벤트 훅 + V2 구독자 ────────
 │   │   ├── events.py           #   on_project_created / on_upload_complete ...
@@ -107,6 +108,8 @@ backend/
 │       └── worker.py        #   커팅 Job 실행 (MVP: BackgroundTasks, V2: Celery)
 │
 ├── alembic/                 # DB 마이그레이션 (SQLite→PostgreSQL 전환 관리)
+├── scripts/                 # 운영 도구 (1회성 설정 등)
+│   └── setup_drive_auth.py  #   V2-3 Drive OAuth 1회 설정 (docs/09 §2)
 ├── tests/                   # Audio Core는 웹 없이 여기서 단독 테스트 가능
 │   ├── test_cutting.py
 │   └── test_naming.py

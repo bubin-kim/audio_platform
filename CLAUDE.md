@@ -149,10 +149,11 @@ cd frontend && npm run build          # 프론트 타입체크 + 빌드
 - ✅ **V2-1**: Notion 연동 완료 (프로젝트 생성 → DB row, 커팅 완료 → 요약 기록) — `6aef08b`
 - ✅ **V2-1b**: Notion 연구노트 확장 완료 (자동기록/수기노트 섹션 분리, cutting_params 기록) — `3335036`
 - ✅ **V2-2**: silence_based 커팅 전략 완료 (+ 튜닝 가이드 docs/08) — `1a840f0`
-- 🔄 **V2-3**: Google Drive CSV 미러링 — **D-M1~D-M4 완료** — `8496ebd`
-  (설정 분기·DriveStorage·MirrorStorage·setup 스크립트 완료.
-  **D-M5 실연동은 사용자 GCP 설정 대기 중**, 이후 D-M6 문서 마무리. 계획: docs/09 §7)
-- **최신 마일스톤 커밋**: `8496ebd` (V2-3 D-M4)
+- ✅ **V2-3**: Google Drive CSV 미러링 **완료** — 코드 `8496ebd`, 실연동 검증 2026-07-12
+  (MirrorStorage: exports/ 비동기 미러·덮어쓰기 확인. wav 미러는 `.env`의
+  `DRIVE_MIRROR_PREFIXES`에 `segments` 추가만으로 활성화. 설계: docs/09)
+- ✅ **UI**: 라벨링 진행률 원형 게이지 + 세그먼트 미니 파형(커팅 시각 비교) — `97a130f`
+- **최신 마일스톤 커밋**: `97a130f`
 - 남은 V2 자리: GitHub(Dataset 버전), AI Assistant, Auth.
 
 ## 12. 하지 말 것 (Don'ts)
