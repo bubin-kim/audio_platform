@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { SegmentWaveform } from "@/components/datasets/SegmentWaveform";
 import { segmentAudioUrl } from "@/lib/api";
 import { formatDuration } from "@/lib/format";
 import type { Segment } from "@/lib/types";
@@ -52,6 +53,7 @@ export function SegmentTable({
             <thead>
               <tr className="text-left text-content-subtle">
                 <th className="pb-2 pr-2 font-normal">재생</th>
+                <th className="pb-2 pr-4 font-normal">파형</th>
                 <th className="pb-2 pr-4 font-normal">파일명</th>
                 <th className="pb-2 pr-4 font-normal">길이</th>
                 <th className="pb-2 pr-4 font-normal">Sample Rate</th>
@@ -75,6 +77,9 @@ export function SegmentTable({
                     >
                       {playingId === s.id ? "■" : "▶"}
                     </button>
+                  </td>
+                  <td className="py-2 pr-4">
+                    <SegmentWaveform segmentId={s.id} />
                   </td>
                   <td className="py-2 pr-4 text-content">{s.filename}</td>
                   <td className="py-2 pr-4 text-content-muted">

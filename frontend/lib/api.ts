@@ -15,6 +15,7 @@ import type {
   Segment,
   StatsResponse,
   UploadResult,
+  Waveform,
 } from "@/lib/types";
 
 const API_BASE =
@@ -104,6 +105,10 @@ export const updateSegmentLabels = (
 /** 세그먼트 오디오는 브라우저 <audio>가 직접 스트리밍하는 URL이다. */
 export const segmentAudioUrl = (segmentId: number) =>
   `${API_BASE}/segments/${segmentId}/audio`;
+
+/** 미니 파형 피크 (06_API.md §4.5). 불변 데이터라 브라우저 캐시 허용. */
+export const getSegmentWaveform = (segmentId: number) =>
+  request<Waveform>(`/segments/${segmentId}/waveform`, { cache: "force-cache" });
 
 // --- Upload ---
 export const uploadFiles = (

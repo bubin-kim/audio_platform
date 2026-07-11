@@ -6,6 +6,17 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 
+class WaveformRead(BaseModel):
+    """세그먼트 미니 파형 데이터 (06_API.md §4.5).
+
+    peaks는 풀스케일(1.0) 기준 절대 피크 — 세그먼트 간 높이 비교 가능.
+    """
+
+    segment_id: int
+    duration_sec: float
+    peaks: list[float]
+
+
 class LabelUpdate(BaseModel):
     """개별 세그먼트 라벨 수정 요청 (06_API.md §8 — 예외 보정용).
 

@@ -11,7 +11,7 @@ from app.background.worker import run_export_job
 from app.schemas.common import Page
 from app.schemas.dataset import DatasetRead
 from app.schemas.job import JobRead
-from app.schemas.segment import LabelUpdate, SegmentRead
+from app.schemas.segment import LabelUpdate, SegmentRead, WaveformRead
 from app.services.dataset_service import DatasetService
 from app.services.segment_service import SegmentService
 from app.storage.base import StorageBackend
@@ -125,6 +125,25 @@ def get_segment_audio(
             # 세그먼트 파일은 생성 후 불변이라 캐시해도 안전하다.
             "Cache-Control": "private, max-age=3600",
         },
+    )
+
+
+@router.get(
+    "/segments/{segment_id}/waveform",
+    response_model=WaveformRead,
+    summary="세그먼트 미니 파형 피크 (시각적 비교용)",
+)
+def get_segment_waveform(
+    segment_id: int,
+    response: Response,
+    db: Session = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage_dep),
+) -> WaveformRead:
+    segment, peaks = SegmentService(db).waveform(segment_id, storage)
+    # 세그먼트 파일은 생성 후 불변 → 오디오 스트림과 동일하게 캐시 허용.
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    return WaveformRead(
+        segment_id=segment.id, duration_sec=segment.duration_sec, peaks=peaks
     )
 
 

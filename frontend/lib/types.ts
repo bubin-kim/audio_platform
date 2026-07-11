@@ -85,6 +85,13 @@ export interface Segment {
   created_at: string;
 }
 
+/** 미니 파형 (06_API.md §4.5). peaks는 풀스케일 기준 절대 피크 0..1. */
+export interface Waveform {
+  segment_id: number;
+  duration_sec: number;
+  peaks: number[];
+}
+
 // --- Upload ---
 
 export interface SourceRead {

@@ -53,6 +53,7 @@ export default async function DashboardPage() {
             current={`${stats.labeling_progress.labeled} / ${stats.labeling_progress.total}`}
             target={null}
             ratio={stats.labeling_progress.ratio}
+            variant="gauge"
           />
         </div>
 

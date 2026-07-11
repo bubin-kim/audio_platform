@@ -9,10 +9,12 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.audio.waveform import waveform_peaks
 from app.core.exceptions import NotFoundError
 from app.models.segment import Segment
 from app.repositories.segment_repo import SegmentRepository
 from app.services.label_validation import compute_is_labeled, validate_labels
+from app.storage.base import StorageBackend
 
 
 class SegmentService:
@@ -25,6 +27,14 @@ class SegmentService:
         if segment is None:
             raise NotFoundError(f"Segment {segment_id}를 찾을 수 없습니다.")
         return segment
+
+    def waveform(
+        self, segment_id: int, storage: StorageBackend, *, bins: int = 60
+    ) -> tuple[Segment, list[float]]:
+        """세그먼트 미니 파형 피크 (06_API.md §4.5). 추출은 audio/에 위임."""
+        segment = self.get(segment_id)
+        peaks = waveform_peaks(storage.local_path(segment.storage_path), bins=bins)
+        return segment, peaks
 
     def update_labels(self, segment_id: int, labels: dict[str, Any]) -> Segment:
         """기존 labels 위에 부분 덮어쓰기 → schema 검증 → is_labeled 재계산."""
