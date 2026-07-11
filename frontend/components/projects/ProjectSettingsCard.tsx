@@ -3,6 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
+import {
+  CuttingConfigFields,
+  paramsToStrings,
+  stringsToParams,
+} from "@/components/projects/CuttingConfigFields";
 import { LabelSchemaEditor } from "@/components/projects/LabelSchemaEditor";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -17,8 +22,9 @@ export function ProjectSettingsCard({ project }: { project: Project }) {
   const [name, setName] = useState(project.name);
   const [domain, setDomain] = useState(project.domain ?? "");
   const [namingPattern, setNamingPattern] = useState(project.naming_pattern);
-  const [intervalSec, setIntervalSec] = useState(
-    Number(project.cutting_params.interval_sec ?? 3),
+  const [cuttingMode, setCuttingMode] = useState(project.cutting_mode);
+  const [cuttingValues, setCuttingValues] = useState<Record<string, string>>(
+    paramsToStrings(project.cutting_params),
   );
   const [targetDurationSec, setTargetDurationSec] = useState(
     project.target_duration_sec != null ? String(project.target_duration_sec) : "",
@@ -34,7 +40,8 @@ export function ProjectSettingsCard({ project }: { project: Project }) {
     setName(project.name);
     setDomain(project.domain ?? "");
     setNamingPattern(project.naming_pattern);
-    setIntervalSec(Number(project.cutting_params.interval_sec ?? 3));
+    setCuttingMode(project.cutting_mode);
+    setCuttingValues(paramsToStrings(project.cutting_params));
     setTargetDurationSec(
       project.target_duration_sec != null ? String(project.target_duration_sec) : "",
     );
@@ -51,7 +58,8 @@ export function ProjectSettingsCard({ project }: { project: Project }) {
       await updateProject(project.id, {
         name,
         domain: domain || null,
-        cutting_params: { ...project.cutting_params, interval_sec: intervalSec },
+        cutting_mode: cuttingMode,
+        cutting_params: stringsToParams(cuttingMode, cuttingValues),
         naming_pattern: namingPattern,
         label_schema: labelSchema,
         target_duration_sec: targetDurationSec ? Number(targetDurationSec) : null,
@@ -79,8 +87,12 @@ export function ProjectSettingsCard({ project }: { project: Project }) {
             <div className="min-w-0">
               <p className="text-content-subtle">커팅 방식</p>
               <p className="mt-1 break-words text-content">
-                {project.cutting_mode} (
-                {Number(project.cutting_params.interval_sec ?? "—")}초)
+                {project.cutting_mode}
+              </p>
+              <p className="mt-0.5 break-words text-xs text-content-subtle">
+                {Object.entries(project.cutting_params)
+                  .map(([k, v]) => `${k}=${v}`)
+                  .join(", ") || "기본값"}
               </p>
             </div>
             <div className="min-w-0">
@@ -154,20 +166,6 @@ export function ProjectSettingsCard({ project }: { project: Project }) {
           </div>
           <div>
             <label className="text-xs text-content-subtle">
-              커팅 간격(초) — {project.cutting_mode}
-            </label>
-            <input
-              required
-              type="number"
-              min={0.1}
-              step={0.1}
-              value={intervalSec}
-              onChange={(e) => setIntervalSec(Number(e.target.value))}
-              className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-content-subtle">
               목표 총 녹음시간(초, 선택)
             </label>
             <input
@@ -176,6 +174,20 @@ export function ProjectSettingsCard({ project }: { project: Project }) {
               value={targetDurationSec}
               onChange={(e) => setTargetDurationSec(e.target.value)}
               className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs text-content-subtle">커팅 방식</label>
+          <p className="mt-0.5 text-xs text-content-subtle">
+            변경은 이후 커팅부터 적용됩니다. 이미 만들어진 세그먼트는 바뀌지 않습니다.
+          </p>
+          <div className="mt-1">
+            <CuttingConfigFields
+              mode={cuttingMode}
+              values={cuttingValues}
+              onModeChange={setCuttingMode}
+              onValuesChange={setCuttingValues}
             />
           </div>
         </div>

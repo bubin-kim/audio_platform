@@ -92,8 +92,10 @@
   "target_duration_sec": 36000
 }
 ```
-- `cutting_mode`: registry 키. MVP는 `"fixed_interval"`(silence/event는 이후 추가).
-- `cutting_params`: 전략별 파라미터(JSON). fixed_interval은 `interval_sec`.
+- `cutting_mode`: registry 키. `"fixed_interval"` · `"silence_based"` (event는 이후 추가).
+- `cutting_params`: 전략별 파라미터(JSON). fixed_interval은 `interval_sec`(필수).
+  silence_based는 전부 선택: `silence_threshold_db`(기본 -40) · `min_silence_sec`(0.3) ·
+  `min_segment_sec`(0.2) · `max_segment_sec`(없음) · `padding_sec`(0.1).
 - `target_duration_sec`(nullable): 대시보드 "업로드 진행률" 분모(05 §4).
 - `domain`: **태그일 뿐**. 서버는 이 값으로 분기하지 않는다(P1).
 

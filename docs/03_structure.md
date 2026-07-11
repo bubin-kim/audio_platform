@@ -68,7 +68,8 @@ backend/
 │   │       ├── base.py            #     CutStrategy 인터페이스 + registry
 │   │       ├── event.py           #     EventDetectionStrategy
 │   │       ├── silence.py         #     SilenceDetectionStrategy
-│   │       └── fixed_interval.py  #     FixedIntervalStrategy
+│   │       ├── fixed_interval.py  #     FixedIntervalStrategy
+│   │       └── silence_based.py   #     SilenceBasedStrategy (무음 기준)
 │   │
 │   ├── repositories/         # ── [Repository Layer] DB 접근을 숨김 ────
 │   │   ├── project_repo.py

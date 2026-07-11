@@ -3,6 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
+import {
+  CuttingConfigFields,
+  stringsToParams,
+} from "@/components/projects/CuttingConfigFields";
 import { LabelSchemaEditor } from "@/components/projects/LabelSchemaEditor";
 import { Button } from "@/components/ui/Button";
 import { createProject } from "@/lib/api";
@@ -24,7 +28,10 @@ export function ProjectForm() {
   const [domain, setDomain] = useState("");
   const [isCustomDomain, setIsCustomDomain] = useState(false);
   const [namingPattern, setNamingPattern] = useState("{date}_{seq:03d}");
-  const [intervalSec, setIntervalSec] = useState(3);
+  const [cuttingMode, setCuttingMode] = useState("fixed_interval");
+  const [cuttingValues, setCuttingValues] = useState<Record<string, string>>({
+    interval_sec: "3",
+  });
   const [targetDurationSec, setTargetDurationSec] = useState("");
   const [labelSchema, setLabelSchema] = useState<LabelFieldSchema[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -38,8 +45,8 @@ export function ProjectForm() {
       const project = await createProject({
         name,
         domain: domain || null,
-        cutting_mode: "fixed_interval",
-        cutting_params: { interval_sec: intervalSec },
+        cutting_mode: cuttingMode,
+        cutting_params: stringsToParams(cuttingMode, cuttingValues),
         naming_pattern: namingPattern,
         label_schema: labelSchema,
         target_duration_sec: targetDurationSec ? Number(targetDurationSec) : null,
@@ -123,18 +130,15 @@ export function ProjectForm() {
         />
       </div>
       <div>
-        <label className="text-xs text-content-subtle">
-          커팅 간격(초) — fixed_interval
-        </label>
-        <input
-          required
-          type="number"
-          min={0.1}
-          step={0.1}
-          value={intervalSec}
-          onChange={(e) => setIntervalSec(Number(e.target.value))}
-          className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
-        />
+        <label className="text-xs text-content-subtle">커팅 방식</label>
+        <div className="mt-1">
+          <CuttingConfigFields
+            mode={cuttingMode}
+            values={cuttingValues}
+            onModeChange={setCuttingMode}
+            onValuesChange={setCuttingValues}
+          />
+        </div>
       </div>
       <div>
         <label className="text-xs text-content-subtle">

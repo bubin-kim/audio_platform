@@ -6,7 +6,8 @@ export function formatDuration(sec: number): string {
   const s = Math.round(sec % 60);
   if (h > 0) return `${h}시간 ${m}분`;
   if (m > 0) return `${m}분 ${s}초`;
-  return `${s.toFixed(sec < 10 ? 1 : 0)}초`;
+  // 1분 미만은 반올림 전 원본 초를 소수점까지 보여준다 (1.1초가 "1.0초"로 뭉개지지 않게).
+  return `${sec.toFixed(sec < 10 ? 1 : 0)}초`;
 }
 
 export function formatBytes(bytes: number): string {
