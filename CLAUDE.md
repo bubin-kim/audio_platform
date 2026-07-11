@@ -85,13 +85,21 @@
 - 커팅을 HTTP 요청 안에서 동기 실행하기(반드시 백그라운드 Job).
 - 승인 없이 스택·주요 구조 바꾸기.
 
-## 9. 현재 단계
+## 9. 현재 진행 상황
 
-**MVP 완료** (M1~M10, 재사용성 검증 통과 — 커밋 bdcbd12). 현재 **V2 진행 중**:
-- ✅ V2-1 Notion 연동 (docs/07): 프로젝트 생성→Notion row, 커팅 완료→요약 블록.
-  `hooks/notion.py` 구독자 방식 — **P4 첫 실증**: `.env`의 `NOTION_API_KEY`·
-  `NOTION_DATABASE_ID` 없으면 구독자 미등록 = MVP와 동일 동작.
-- 남은 V2 자리: Drive(Storage 교체), GitHub(Dataset 버전), AI Assistant, Auth.
+> **업데이트 규칙**: 마일스톤(M, V2-N, D-MN 등)이 하나 끝나고 커밋할 때마다,
+> 이 섹션을 그 시점 상태로 업데이트한다(완료 항목·진행 중 항목·최신 커밋 해시).
+> 세션·계정·컴퓨터가 바뀌어도 이 섹션만 읽으면 현재 위치를 알 수 있게 유지한다.
+
+- ✅ **MVP (M1~M10)** 완료, 도메인 재사용성 검증 통과 — 커밋 `bdcbd12`
+- ✅ **V2-1**: Notion 연동 완료 (프로젝트 생성 → DB row, 커팅 완료 → 요약 기록) — `6aef08b`
+- ✅ **V2-1b**: Notion 연구노트 확장 완료 (자동기록/수기노트 섹션 분리, cutting_params 기록) — `3335036`
+- ✅ **V2-2**: silence_based 커팅 전략 완료 (+ 튜닝 가이드 docs/08) — `1a840f0`
+- 🔄 **V2-3**: Google Drive CSV 미러링 — **D-M4까지 완료** — `8496ebd`
+  (설정 분기·DriveStorage·MirrorStorage·setup 스크립트. 남은 것: D-M5 실연동
+  — 사용자 GCP 설정 필요, D-M6 문서 마무리. 계획: docs/09 §7)
+- **최신 마일스톤 커밋**: `8496ebd` (V2-3 D-M4)
+- 남은 V2 자리: GitHub(Dataset 버전), AI Assistant, Auth.
 
 V2에서도 위 원칙(P1~P4)과 금지사항은 그대로 유효하다. 외부 서비스 구독자는
 반드시 hooks/에 두고, 실패가 본 흐름을 깨지 않게 한다.
