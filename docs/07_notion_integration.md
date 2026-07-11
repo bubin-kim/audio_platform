@@ -92,11 +92,30 @@ DB 이름: **"Audio Platform 프로젝트"** (1 row = 플랫폼 Project 1개)
 
 ## 5. 이벤트 매핑 (동작 계약)
 
+### 5.0 페이지 본문 구조 (V2-1b — 자동 기록과 수기 노트의 분리)
+프로젝트 페이지 본문은 두 섹션으로 나뉜다. 자동 로그는 **컨테이너 안에만** 쌓이고,
+연구 노트 영역은 플랫폼이 **절대 건드리지 않는다**.
+
+```
+[프로젝트 페이지]
+├─ 🤖 자동 기록 (플랫폼)      ← 토글 헤딩(heading_2, is_toggleable) = 로그 컨테이너
+│   ├─ • {완료시각} — 세그먼트 N개, 총 M초 (dataset: 이름, Job #id)
+│   │     └ {cutting_mode} · {key}={value}, ...   ← 이번 Job의 실제 사용 파라미터
+│   └─ • (다음 로그 누적...)
+├─ 📝 연구 노트               ← 일반 헤딩 + 빈 문단. 사람 전용 자유 기록 영역
+```
+
+- 두 섹션은 **페이지 생성 시 함께 생성**된다(`POST /v1/pages`의 `children`).
+- 파라미터 줄은 bullet의 **중첩 자식 문단**. 키를 하드코딩하지 않고
+  `Job.params["cutting_params"]` dict를 범용 렌더링한다(P1 — 어떤 전략이 와도 코드 불변).
+  `params_override`로 돌린 실험도 Job.params에 실제 사용값이 있으므로 정확히 남는다.
+
 ### 5.1 프로젝트 생성 → 페이지 생성
 - 구독: `on_project_created(project_id)`
-- 동작: 자체 DB 세션으로 Project 조회 → `POST /v1/pages` (parent=database_id, §4 속성) 1회.
+- 동작: 자체 DB 세션으로 Project 조회 → `POST /v1/pages` (parent=database_id, §4 속성,
+  children=§5.0의 두 섹션) 1회.
 
-### 5.2 커팅 완료 → 요약 블록 append
+### 5.2 커팅 완료 → 요약 블록 append (컨테이너 안에)
 - 구독: `on_processing_done(dataset_id, job_id)` — payload에 project_id가 없으므로
   `dataset.project` relationship으로 역조회.
 - 동작:
@@ -104,9 +123,12 @@ DB 이름: **"Audio Platform 프로젝트"** (1 row = 플랫폼 Project 1개)
   2. `POST /v1/databases/{id}/query` — `platform_id == project.id` 필터로 페이지 검색.
   3. **페이지 없으면 그 자리에서 생성**(§5.1과 동일 호출) — 연동 이전에 만들어진 기존
      프로젝트도 첫 커팅 때 자동으로 소급 등록된다.
-  4. `PATCH /v1/blocks/{page_id}/children` — bulleted_list_item 1개 append:
+  4. `GET /v1/blocks/{page_id}/children`으로 "자동 기록" 토글 헤딩(컨테이너)을 찾는다.
+     **없으면 두 섹션을 페이지 끝에 생성**(구버전 페이지 소급 — 기존 본문은 그대로 둠).
+  5. `PATCH /v1/blocks/{컨테이너_id}/children` — bullet + 중첩 파라미터 줄 append:
      ```
-     2026-07-11 14:30 UTC — 세그먼트 12개, 총 36.0초 (dataset: v1 초기수집, Job #7)
+     • 2026-07-11 14:40 UTC — 세그먼트 33개, 총 12.0초 (dataset: v1 초기수집, Job #12)
+         silence_based · silence_threshold_db=-35, min_silence_sec=0.15, min_segment_sec=0.1
      ```
 
 ### 매핑 방식의 근거 (platform_id 조회 채택)
@@ -157,6 +179,7 @@ DB 이름: **"Audio Platform 프로젝트"** (1 row = 플랫폼 Project 1개)
 | 400 validation_error | DB 속성 이름/타입 불일치 | §4 스키마와 Notion DB 속성 대조 |
 | 기록이 안 남는데 에러도 없음 | `notion_enabled=False` (키 누락) | `.env` 두 키 모두 설정 후 재기동 |
 | 서버 로그에 timeout | Notion 응답 지연 | `NOTION_TIMEOUT_SEC` 상향 (기본 10초) |
+| "자동 기록" 섹션이 하나 더 생김 | 사용자가 토글 헤딩 제목을 변경/삭제 | 컨테이너는 제목 텍스트("자동 기록")로 찾는다 — 제목을 되돌리거나 새 섹션에 계속 쌓이게 두면 됨 (기록 유실 없음) |
 
 ---
 

@@ -30,6 +30,48 @@ logger = logging.getLogger(__name__)
 
 NOTION_BASE_URL = "https://api.notion.com"
 
+# 페이지 본문 섹션 (docs/07 §5.0). 컨테이너 탐색은 이 헤딩 텍스트로 매칭한다.
+AUTO_LOG_HEADING = "자동 기록"
+NOTES_HEADING = "연구 노트"
+
+
+def _section_blocks() -> list[dict[str, Any]]:
+    """페이지 본문의 두 섹션 블록: 자동 기록(토글 헤딩) + 연구 노트(사람 전용)."""
+    return [
+        {
+            "object": "block",
+            "type": "heading_2",
+            "heading_2": {
+                "rich_text": [
+                    {"type": "text", "text": {"content": f"🤖 {AUTO_LOG_HEADING} (플랫폼)"}}
+                ],
+                "is_toggleable": True,  # 자식을 가질 수 있는 토글 헤딩 = 로그 컨테이너
+            },
+        },
+        {
+            "object": "block",
+            "type": "heading_2",
+            "heading_2": {
+                "rich_text": [
+                    {"type": "text", "text": {"content": f"📝 {NOTES_HEADING}"}}
+                ]
+            },
+        },
+        {
+            "object": "block",
+            "type": "paragraph",
+            "paragraph": {
+                "rich_text": [
+                    {
+                        "type": "text",
+                        "text": {"content": "여기에 자유롭게 기록하세요. 플랫폼은 이 영역을 건드리지 않습니다."},
+                        "annotations": {"color": "gray"},
+                    }
+                ]
+            },
+        },
+    ]
+
 
 # --- [1] HTTP 클라이언트 — Notion API를 아는 유일한 곳 -------------------------
 
@@ -74,8 +116,17 @@ class NotionClient:
             res.raise_for_status()
             return res.json()
 
+    def _get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        with httpx.Client(**self._client_kwargs) as client:
+            res = client.get(path, params=params)
+            res.raise_for_status()
+            return res.json()
+
     def create_project_page(self, project: Project) -> str:
-        """프로젝트 row(=페이지)를 생성하고 page_id를 반환한다 (docs/07 §4·§5.1)."""
+        """프로젝트 row(=페이지)를 생성하고 page_id를 반환한다 (docs/07 §4·§5.1).
+
+        본문에 §5.0의 두 섹션(자동 기록 컨테이너 + 연구 노트)을 함께 만든다.
+        """
         properties: dict[str, Any] = {
             "프로젝트명": _title(project.name),
             "platform_id": _number(project.id),
@@ -91,9 +142,43 @@ class NotionClient:
 
         data = self._post(
             "/v1/pages",
-            {"parent": {"database_id": self.database_id}, "properties": properties},
+            {
+                "parent": {"database_id": self.database_id},
+                "properties": properties,
+                "children": _section_blocks(),
+            },
         )
         return data["id"]
+
+    def find_log_container(self, page_id: str) -> str | None:
+        """페이지 자식에서 '자동 기록' 토글 헤딩(로그 컨테이너)의 block_id를 찾는다.
+
+        상단 100블록까지만 본다(컨테이너는 항상 페이지 상단 — docs/07 §5.0 한계 명시).
+        """
+        data = self._get(f"/v1/blocks/{page_id}/children", params={"page_size": 100})
+        for block in data.get("results", []):
+            if block.get("type") != "heading_2":
+                continue
+            texts = block.get("heading_2", {}).get("rich_text", [])
+            plain = "".join(t.get("plain_text", "") for t in texts)
+            if AUTO_LOG_HEADING in plain:
+                return block["id"]
+        return None
+
+    def create_sections(self, page_id: str) -> str:
+        """두 섹션을 페이지 끝에 생성하고 로그 컨테이너 block_id를 반환한다.
+
+        구버전 페이지(섹션 없이 만들어진) 소급용 — 기존 본문은 건드리지 않는다.
+        """
+        data = self._patch(
+            f"/v1/blocks/{page_id}/children", {"children": _section_blocks()}
+        )
+        for block in data.get("results", []):
+            if block.get("type") == "heading_2" and block.get("heading_2", {}).get(
+                "is_toggleable"
+            ):
+                return block["id"]
+        raise RuntimeError("섹션 생성 응답에서 로그 컨테이너를 찾지 못했습니다.")
 
     def find_page_by_platform_id(self, project_id: int) -> str | None:
         """platform_id 속성으로 페이지를 찾아 page_id를 반환한다. 없으면 None."""
@@ -110,24 +195,37 @@ class NotionClient:
         results = data.get("results", [])
         return results[0]["id"] if results else None
 
-    def append_summary_block(self, page_id: str, text: str) -> None:
-        """페이지 본문에 bulleted_list_item 한 줄을 추가한다 (docs/07 §5.2)."""
-        self._patch(
-            f"/v1/blocks/{page_id}/children",
-            {
-                "children": [
-                    {
-                        "object": "block",
-                        "type": "bulleted_list_item",
-                        "bulleted_list_item": {
-                            "rich_text": [
-                                {"type": "text", "text": {"content": text}}
-                            ]
-                        },
-                    }
-                ]
+    def append_summary_block(
+        self, container_id: str, text: str, detail: str | None = None
+    ) -> None:
+        """로그 컨테이너 안에 bullet 한 줄(+중첩 파라미터 줄)을 추가한다 (docs/07 §5.2).
+
+        detail이 있으면 bullet의 자식 문단으로 붙는다(이번 Job의 cutting_params 등).
+        """
+        bullet: dict[str, Any] = {
+            "object": "block",
+            "type": "bulleted_list_item",
+            "bulleted_list_item": {
+                "rich_text": [{"type": "text", "text": {"content": text}}]
             },
-        )
+        }
+        if detail:
+            bullet["bulleted_list_item"]["children"] = [
+                {
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {
+                        "rich_text": [
+                            {
+                                "type": "text",
+                                "text": {"content": detail},
+                                "annotations": {"color": "gray"},
+                            }
+                        ]
+                    },
+                }
+            ]
+        self._patch(f"/v1/blocks/{container_id}/children", {"children": [bullet]})
 
 
 # 속성 페이로드 빌더 (Notion property JSON 형태)
@@ -149,6 +247,19 @@ def _number(value: float | int) -> dict[str, Any]:
 
 def _date(value: datetime) -> dict[str, Any]:
     return {"date": {"start": value.isoformat()}}
+
+
+def _format_cutting_params(job_params: dict[str, Any]) -> str | None:
+    """Job.params → '모드 · key=value, ...' 한 줄. 키를 하드코딩하지 않는다(P1).
+
+    어떤 전략(silence_based/fixed_interval/미래 전략)이 와도 dict를 그대로 펼친다.
+    """
+    mode = job_params.get("cutting_mode")
+    cutting_params: dict[str, Any] = job_params.get("cutting_params") or {}
+    if not mode and not cutting_params:
+        return None
+    rendered = ", ".join(f"{k}={v}" for k, v in cutting_params.items())
+    return f"{mode} · {rendered}" if rendered else str(mode)
 
 
 def _make_client() -> NotionClient:
@@ -220,13 +331,20 @@ def _log_processing_done(dataset_id: int, job_id: int) -> None:
             # 연동 이전에 만든 프로젝트 — 첫 커팅 때 소급 생성 (docs/07 §5.2)
             page_id = client.create_project_page(project)
 
+        # 로그 컨테이너(자동 기록 섹션) 확보 — 구버전 페이지면 섹션을 소급 생성.
+        container_id = client.find_log_container(page_id)
+        if container_id is None:
+            container_id = client.create_sections(page_id)
+
         finished = job.finished_at or datetime.now(timezone.utc)
         text = (
             f"{finished.strftime('%Y-%m-%d %H:%M')} UTC — "
             f"세그먼트 {job.total_items}개, 총 {total_duration:.1f}초 "
             f"(dataset: {dataset.name}, Job #{job.id})"
         )
-        client.append_summary_block(page_id, text)
+        client.append_summary_block(
+            container_id, text, detail=_format_cutting_params(job.params)
+        )
         logger.info("notion: 커팅 요약 기록 (dataset_id=%s, job_id=%s)", dataset_id, job_id)
     except Exception:  # noqa: BLE001
         logger.exception(

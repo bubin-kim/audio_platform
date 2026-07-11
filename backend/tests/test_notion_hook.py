@@ -24,12 +24,31 @@ from tests.conftest import upload_file
 DB_ID = "0" * 32
 
 
+def _container_block(block_id: str = "container-1") -> dict:
+    """GET children 응답용: '자동 기록' 토글 헤딩(로그 컨테이너) 블록."""
+    return {
+        "id": block_id,
+        "type": "heading_2",
+        "heading_2": {
+            "is_toggleable": True,
+            "rich_text": [{"plain_text": "🤖 자동 기록 (플랫폼)"}],
+        },
+    }
+
+
 class _Recorder:
     """MockTransport 핸들러 — 요청을 기록하고 시나리오별 응답을 돌려준다."""
 
-    def __init__(self, *, query_results: list[dict] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        query_results: list[dict] | None = None,
+        page_children: list[dict] | None = None,
+    ) -> None:
         self.requests: list[httpx.Request] = []
         self.query_results = query_results if query_results is not None else []
+        # GET /v1/blocks/{page}/children 응답 (컨테이너 탐색용)
+        self.page_children = page_children if page_children is not None else []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -38,7 +57,16 @@ class _Recorder:
             return httpx.Response(200, json={"id": "page-abc"})
         if path.endswith("/query"):
             return httpx.Response(200, json={"results": self.query_results})
-        if "/blocks/" in path:
+        if "/blocks/" in path and request.method == "GET":
+            return httpx.Response(200, json={"results": self.page_children})
+        if "/blocks/" in path and request.method == "PATCH":
+            # 섹션 생성이면 생성된 블록 목록을(컨테이너 포함), 로그 append면 빈 결과를 반환
+            body = json.loads(request.content.decode())
+            children = body.get("children", [])
+            if any(c.get("type") == "heading_2" for c in children):
+                return httpx.Response(
+                    200, json={"results": [_container_block("container-new")]}
+                )
             return httpx.Response(200, json={"results": []})
         return httpx.Response(404, json={"message": "unknown path"})
 
@@ -184,31 +212,36 @@ def test_project_create_triggers_notion_page(
     assert props["platform_id"]["number"] == r.json()["id"]
 
 
-def test_processing_done_appends_summary(
+def test_processing_done_appends_summary_into_container(
     client: TestClient, notion_env: _Recorder, make_wav: Callable[..., Path]
 ) -> None:
+    """커팅 완료 로그가 페이지 루트가 아니라 '자동 기록' 컨테이너 안에 붙는다."""
     pid = client.post("/api/projects", json=_project_payload()).json()["id"]
     wav = make_wav(duration_sec=3.0, name="rec.wav")
     ds_id = upload_file(client, pid, wav, "rec.wav")["dataset_id"]
 
-    # 커팅 완료 시점에 페이지가 이미 있다고 응답 → append 경로
+    # 페이지 존재 + 섹션 있는 페이지 시나리오
     notion_env.query_results = [{"id": "page-abc"}]
+    notion_env.page_children = [_container_block("container-1")]
     r = client.post(f"/api/datasets/{ds_id}/process")
     assert r.status_code == 202
 
-    paths = [req.url.path for req in notion_env.requests]
-    # [프로젝트 생성 페이지] → [query] → [블록 append]
+    paths = [(req.method, req.url.path) for req in notion_env.requests]
+    # [프로젝트 생성 페이지] → [query] → [GET children: 컨테이너 탐색] → [컨테이너에 append]
     assert paths == [
-        "/v1/pages",
-        f"/v1/databases/{DB_ID}/query",
-        "/v1/blocks/page-abc/children",
+        ("POST", "/v1/pages"),
+        ("POST", f"/v1/databases/{DB_ID}/query"),
+        ("GET", "/v1/blocks/page-abc/children"),
+        ("PATCH", "/v1/blocks/container-1/children"),  # ★ 페이지가 아닌 컨테이너
     ]
-    text = _body(notion_env.requests[-1])["children"][0]["bulleted_list_item"][
-        "rich_text"
-    ][0]["text"]["content"]
+    bullet = _body(notion_env.requests[-1])["children"][0]["bulleted_list_item"]
+    text = bullet["rich_text"][0]["text"]["content"]
     assert "세그먼트 3개" in text  # 3초 / 1초 간격
     assert "총 3.0초" in text
     assert "Job #" in text
+    # ★ 중첩 파라미터 줄 (이번 Job의 cutting_params)
+    detail = bullet["children"][0]["paragraph"]["rich_text"][0]["text"]["content"]
+    assert detail == "fixed_interval · interval_sec=1.0"
 
 
 def test_processing_done_lazy_creates_missing_page(
@@ -221,14 +254,62 @@ def test_processing_done_lazy_creates_missing_page(
 
     notion_env.requests.clear()  # 생성 이벤트 기록 제거
     notion_env.query_results = []  # 페이지 없음 시나리오
+    # 새로 만든 페이지에는 섹션이 있다(생성 시 children 포함)
+    notion_env.page_children = [_container_block("container-1")]
     client.post(f"/api/datasets/{ds_id}/process")
 
-    paths = [req.url.path for req in notion_env.requests]
+    paths = [(req.method, req.url.path) for req in notion_env.requests]
     assert paths == [
-        f"/v1/databases/{DB_ID}/query",
-        "/v1/pages",  # lazy 생성
-        "/v1/blocks/page-abc/children",
+        ("POST", f"/v1/databases/{DB_ID}/query"),
+        ("POST", "/v1/pages"),  # lazy 페이지 생성 (섹션 포함)
+        ("GET", "/v1/blocks/page-abc/children"),
+        ("PATCH", "/v1/blocks/container-1/children"),
     ]
+
+
+def test_processing_done_lazy_creates_sections_on_legacy_page(
+    client: TestClient, notion_env: _Recorder, make_wav: Callable[..., Path]
+) -> None:
+    """구버전 페이지(섹션 없음) 소급: 섹션을 만들고 그 컨테이너에 기록한다."""
+    pid = client.post("/api/projects", json=_project_payload()).json()["id"]
+    wav = make_wav(duration_sec=2.0, name="rec.wav")
+    ds_id = upload_file(client, pid, wav, "rec.wav")["dataset_id"]
+
+    notion_env.requests.clear()
+    notion_env.query_results = [{"id": "page-abc"}]  # 페이지는 있음
+    notion_env.page_children = []  # 섹션 없음 (구버전)
+    client.post(f"/api/datasets/{ds_id}/process")
+
+    paths = [(req.method, req.url.path) for req in notion_env.requests]
+    assert paths == [
+        ("POST", f"/v1/databases/{DB_ID}/query"),
+        ("GET", "/v1/blocks/page-abc/children"),  # 탐색 → 없음
+        ("PATCH", "/v1/blocks/page-abc/children"),  # 섹션 소급 생성
+        ("PATCH", "/v1/blocks/container-new/children"),  # 새 컨테이너에 기록
+    ]
+
+
+def test_create_page_includes_sections() -> None:
+    """페이지 생성 시 본문에 두 섹션(자동 기록 토글 + 연구 노트)이 포함된다."""
+    import app.hooks.notion as notion_module
+    from app.models.project import Project as P
+
+    rec = _Recorder()
+    project = P(
+        name="t", cutting_mode="fixed_interval", cutting_params={},
+        naming_pattern="{seq}", label_schema=[],
+    )
+    project.id = 1
+    from datetime import datetime, timezone
+    project.created_at = datetime.now(timezone.utc)
+    _client_with(rec).create_project_page(project)
+
+    children = _body(rec.requests[0])["children"]
+    types = [c["type"] for c in children]
+    assert types == ["heading_2", "heading_2", "paragraph"]
+    assert children[0]["heading_2"]["is_toggleable"] is True
+    assert "자동 기록" in children[0]["heading_2"]["rich_text"][0]["text"]["content"]
+    assert "연구 노트" in children[1]["heading_2"]["rich_text"][0]["text"]["content"]
 
 
 def test_notion_failure_does_not_break_main_flow(
