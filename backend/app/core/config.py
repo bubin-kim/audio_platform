@@ -48,6 +48,26 @@ class Settings(BaseSettings):
         """Notion 구독자를 등록할지 여부 (토큰 + DB id 둘 다 필요)."""
         return bool(self.notion_api_key and self.notion_database_id)
 
+    # --- Google Drive 미러 (V2-3, docs/09 §4) ---
+    # 네 값이 모두 있어야 활성화. 없으면 LocalStorage 그대로 = MVP와 동일(P4).
+    google_oauth_client_id: str = ""
+    google_oauth_client_secret: str = ""
+    google_oauth_refresh_token: str = ""
+    drive_root_folder_id: str = ""
+    # 미러 대상 prefix. wav가 필요해지면 "segments" 추가만으로 활성화(코드 변경 0).
+    drive_mirror_prefixes: list[str] = ["exports"]
+    drive_timeout_sec: float = 30.0
+
+    @property
+    def drive_enabled(self) -> bool:
+        """Drive 미러를 켤지 여부 (OAuth 3종 + 루트 폴더 ID 모두 필요)."""
+        return bool(
+            self.google_oauth_client_id
+            and self.google_oauth_client_secret
+            and self.google_oauth_refresh_token
+            and self.drive_root_folder_id
+        )
+
     @property
     def uploads_dir(self) -> Path:
         return self.data_dir / "uploads"
