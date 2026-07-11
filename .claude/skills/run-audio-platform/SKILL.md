@@ -103,7 +103,7 @@ test's project/upload data lands in your real dev db (it warns about this).
 ## Test
 
 ```bash
-cd backend && uv run pytest -q     # 68 passed as of this writing
+cd backend && uv run pytest -q     # 전부 통과해야 정상 (개수는 계속 늘어난다)
 cd frontend && npm run build       # type-checks + builds
 ```
 
