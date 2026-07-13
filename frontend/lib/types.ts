@@ -135,6 +135,10 @@ export interface ProcessRequest {
   source_file_ids?: number[] | null;
   params_override?: Record<string, unknown> | null;
   common_labels?: Record<string, unknown>;
+  /** 기존 세그먼트가 있는 원본을 대체 재커팅 (docs/10). 기본 false → 409. */
+  replace_existing?: boolean;
+  /** 대체 시 겹침 매칭으로 라벨 승계 (docs/10). 기본 true. */
+  inherit_labels?: boolean;
 }
 
 // --- Stats ---

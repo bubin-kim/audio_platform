@@ -57,7 +57,12 @@ export function LabelValuesForm({
               onChange={(e) =>
                 set(
                   field.key,
-                  field.type === "number" ? Number(e.target.value) : e.target.value,
+                  // 빈 입력은 "값 없음"이다 — Number("")=0으로 오라벨되는 것 방지.
+                  e.target.value === ""
+                    ? undefined
+                    : field.type === "number"
+                      ? Number(e.target.value)
+                      : e.target.value,
                 )
               }
               className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"

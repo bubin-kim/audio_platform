@@ -5,6 +5,7 @@ import { Header } from "@/components/layout/Header";
 import { ProjectSettingsCard } from "@/components/projects/ProjectSettingsCard";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { DangerDeleteCard } from "@/components/ui/DangerDeleteCard";
 import { getProject, listDatasets } from "@/lib/api";
 
 export default async function ProjectDetailPage({
@@ -52,6 +53,15 @@ export default async function ProjectDetailPage({
             <p className="mb-4 text-sm font-medium text-content">새 데이터셋</p>
             <DatasetCreateForm projectId={projectId} />
           </Card>
+        </div>
+
+        <div className="mt-6">
+          <DangerDeleteCard
+            kind="project"
+            id={projectId}
+            name={project.name}
+            redirectTo="/projects"
+          />
         </div>
       </main>
     </>

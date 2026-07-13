@@ -7,6 +7,7 @@ import { SegmentTable } from "@/components/datasets/SegmentTable";
 import { Header } from "@/components/layout/Header";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { DangerDeleteCard } from "@/components/ui/DangerDeleteCard";
 import { getDataset, getProject, listJobs, listSegments } from "@/lib/api";
 
 export default async function DatasetDetailPage({
@@ -65,8 +66,21 @@ export default async function DatasetDetailPage({
 
         <Card className="mt-4">
           <p className="mb-3 text-sm font-medium text-content">세그먼트</p>
-          <SegmentTable segments={segmentsPage.items} total={segmentsPage.total} />
+          <SegmentTable
+            segments={segmentsPage.items}
+            total={segmentsPage.total}
+            labelSchema={project.label_schema}
+          />
         </Card>
+
+        <div className="mt-6">
+          <DangerDeleteCard
+            kind="dataset"
+            id={datasetId}
+            name={dataset.name}
+            redirectTo={`/projects/${project.id}`}
+          />
+        </div>
       </main>
     </>
   );

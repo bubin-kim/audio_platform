@@ -21,11 +21,22 @@ import type {
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8100/api";
 
+/** API 에러 — HTTP status를 함께 던져 호출자가 409(충돌) 등을 분기할 수 있게 한다. */
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
 /** 공통 요청 헬퍼. 에러 응답(ErrorResponse)을 표준화해 던진다.
  *
  * 대시보드류 데이터는 자주 바뀌므로 기본은 캐시하지 않는다(no-store).
  * FormData 바디는 브라우저가 boundary를 채운 Content-Type을 스스로 붙이도록
- * 기본 JSON 헤더를 건너뛴다.
+ * 기본 JSON 헤더를 건너뛴다. 204(No Content)는 본문 파싱 없이 undefined를 돌려준다.
  */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const isFormData = init?.body instanceof FormData;
@@ -38,8 +49,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const detail = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(detail.detail ?? `Request failed: ${res.status}`);
+    throw new ApiRequestError(
+      detail.detail ?? `Request failed: ${res.status}`,
+      res.status,
+    );
   }
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
@@ -91,6 +106,20 @@ export const listSegments = (
   datasetId: number,
   params?: { limit?: number; offset?: number },
 ) => request<Page<Segment>>(`/datasets/${datasetId}/segments${qs(params ?? {})}`);
+
+// --- 삭제 (docs/06 §5.2 — 데이터셋·프로젝트는 이름 재입력 확인이 필수) ---
+export const deleteSegment = (id: number) =>
+  request<void>(`/segments/${id}`, { method: "DELETE" });
+
+export const deleteDataset = (id: number, confirmName: string) =>
+  request<void>(`/datasets/${id}${qs({ confirm: confirmName })}`, {
+    method: "DELETE",
+  });
+
+export const deleteProject = (id: number, confirmName: string) =>
+  request<void>(`/projects/${id}${qs({ confirm: confirmName })}`, {
+    method: "DELETE",
+  });
 
 /** 개별 세그먼트 라벨 예외 보정 (06_API.md §8) — 기존 라벨 위에 부분 덮어쓰기. */
 export const updateSegmentLabels = (
