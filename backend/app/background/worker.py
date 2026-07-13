@@ -36,6 +36,30 @@ from app.storage.base import StorageBackend
 logger = logging.getLogger(__name__)
 
 
+def recover_orphan_jobs() -> int:
+    """서버 기동 시 고아 Job 정리 (docs/12 A2). 정리한 개수를 반환한다.
+
+    Job 실행 중 서버가 죽으면 queued/running이 영원히 남아 has_running 가드가
+    해당 dataset의 커팅을 영구히 409로 막는다. MVP는 단일 프로세스(BackgroundTasks)라
+    기동 시점에 진행 중 Job이 존재할 수 없다 — 남아 있다면 전부 고아다.
+    """
+    db = SessionLocal()
+    try:
+        orphans = JobRepository(db).list_unfinished()
+        for job in orphans:
+            job.status = "failed"
+            job.error_msg = "서버 재시작으로 중단됨 (고아 Job 자동 정리)"
+            job.finished_at = datetime.now(timezone.utc)
+            if job.type == "cutting" and job.dataset.status == "processing":
+                job.dataset.status = "collecting"
+        db.commit()
+        if orphans:
+            logger.warning("고아 Job %d개를 failed로 정리했습니다", len(orphans))
+        return len(orphans)
+    finally:
+        db.close()
+
+
 def run_cutting_job(job_id: int) -> None:
     """BackgroundTasks가 호출하는 진입점. 항상 자체 세션을 열고 닫는다."""
     db = SessionLocal()
@@ -95,10 +119,34 @@ def _run(
     inherit: bool = params.get("inherit_labels", True)
 
     # naming_pattern에서 쓸 수 있는 공통 값(공통 라벨 + 오늘 날짜).
-    # seq는 이 Job 전체에 걸친 연속 번호(재현성 있는 순서).
     base_values = {**common_labels, "date": date.today().strftime("%Y%m%d")}
 
-    seq = 1
+    # 재처리(docs/10 §3): 스냅샷 → 기존 세그먼트 삭제를 커팅 전에 선행 패스로 —
+    # 아래 seq 계산이 삭제 이후 개수를 보게 하기 위함.
+    snapshots: dict[int, list[dict]] = {}
+    if replace_existing:
+        for source_id in source_file_ids:
+            old_segments = segment_repo.list_by_source_file(source_id)
+            if inherit:
+                snapshots[source_id] = [
+                    {
+                        "start": s.source_start_sec,
+                        "end": s.source_start_sec + s.duration_sec,
+                        "labels": dict(s.labels or {}),
+                    }
+                    for s in old_segments
+                ]
+            for old in old_segments:
+                storage.delete(old.storage_path)
+                segment_repo.delete(old)
+        db.commit()
+
+    # seq는 Job 단위가 아니라 dataset 누적 (docs/12 A1) — Job마다 1부터 시작하면
+    # 같은 날짜·같은 라벨의 별도 Job이 같은 파일명을 만들어 조용히 덮어쓴다.
+    seq = segment_repo.count_by_dataset(job.dataset_id) + 1
+    job.params = {**job.params, "seq_start": seq}  # 재현성 (JSON 변경 감지 위해 재할당)
+    db.commit()
+
     with tempfile.TemporaryDirectory(prefix="cutting_job_") as tmp_dir:
         tmp_path = Path(tmp_dir)
         for source_id in source_file_ids:
@@ -106,24 +154,7 @@ def _run(
             if source is None:
                 continue
             local_source_path = storage.local_path(source.storage_path)
-
-            # 재처리(docs/10 §3): 스냅샷 → 기존 세그먼트 삭제(DB+Storage) → 커팅.
-            snapshot: list[dict] = []
-            if replace_existing:
-                old_segments = segment_repo.list_by_source_file(source.id)
-                if inherit:
-                    snapshot = [
-                        {
-                            "start": s.source_start_sec,
-                            "end": s.source_start_sec + s.duration_sec,
-                            "labels": dict(s.labels or {}),
-                        }
-                        for s in old_segments
-                    ]
-                for old in old_segments:
-                    storage.delete(old.storage_path)
-                    segment_repo.delete(old)
-                db.commit()
+            snapshot = snapshots.get(source_id, [])
 
             for seg_audio in strategy.cut(local_source_path, cutting_params):
                 values = {**base_values, "seq": seq}
@@ -133,6 +164,12 @@ def _run(
                 write_wav(tmp_file, seg_audio.samples, seg_audio.sample_rate)
 
                 logical_path = f"segments/{job.dataset_id}/{filename}"
+                # 조용한 덮어쓰기 금지 (docs/12 A1): 충돌은 명시적 실패로.
+                if storage.exists(logical_path):
+                    raise RuntimeError(
+                        f"파일명 충돌: {logical_path} 가 이미 존재합니다. "
+                        "naming_pattern에 구분 필드(예: {seq})가 부족하지 않은지 확인하세요."
+                    )
                 storage.save_from_path(logical_path, tmp_file)
                 tmp_file.unlink(missing_ok=True)
 

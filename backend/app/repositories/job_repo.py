@@ -21,6 +21,11 @@ class JobRepository(BaseRepository[Job]):
         )
         return list(self.db.scalars(stmt).all())
 
+    def list_unfinished(self) -> list[Job]:
+        """queued/running 상태의 전체 Job (기동 시 고아 정리용, docs/12 A2)."""
+        stmt = select(Job).where(Job.status.in_(("queued", "running")))
+        return list(self.db.scalars(stmt).all())
+
     def count_by_dataset(self, dataset_id: int) -> int:
         stmt = (
             select(func.count()).select_from(Job).where(Job.dataset_id == dataset_id)

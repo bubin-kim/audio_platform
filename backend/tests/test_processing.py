@@ -193,3 +193,47 @@ def test_process_missing_dataset_404(client: TestClient) -> None:
 def test_job_not_found_404(client: TestClient) -> None:
     r = client.get("/api/jobs/9999")
     assert r.status_code == 404
+
+
+# --- A2: 고아 Job 복구 (docs/12) ---
+
+
+def test_orphan_job_recovery_unblocks_dataset(
+    client: TestClient, make_wav: Callable[..., Path]
+) -> None:
+    """크래시로 남은 running Job이 커팅을 영구 409로 막는 문제의 복구 (docs/12 A2)."""
+    import app.background.worker as worker_module
+
+    pid = client.post("/api/projects", json=_project_payload()).json()["id"]
+    wav = make_wav(duration_sec=2.0, name="rec.wav")
+    ds_id = upload_file(client, pid, wav, "rec.wav")["dataset_id"]
+
+    # 고아 상황 재현: running Job + dataset processing 상태를 직접 심는다
+    db = worker_module.SessionLocal()
+    from app.models.dataset import Dataset as DsModel
+
+    db.add(Job(dataset_id=ds_id, type="cutting", status="running", params={}))
+    db.get(DsModel, ds_id).status = "processing"
+    db.commit()
+    db.close()
+
+    # 복구 전: 커팅이 409로 막힘 (고아가 잠그고 있음)
+    r = client.post(
+        f"/api/datasets/{ds_id}/process", json={"common_labels": {"distance_m": 1}}
+    )
+    assert r.status_code == 409
+
+    # 서버 재기동에 해당하는 복구 실행
+    recovered = worker_module.recover_orphan_jobs()
+    assert recovered == 1
+
+    # 복구 후: Job은 failed, dataset은 collecting, 커팅 가능
+    db = worker_module.SessionLocal()
+    orphan = db.query(Job).filter(Job.status == "failed").order_by(Job.id.desc()).first()
+    assert "서버 재시작" in orphan.error_msg
+    assert db.get(DsModel, ds_id).status == "collecting"
+    db.close()
+    r = client.post(
+        f"/api/datasets/{ds_id}/process", json={"common_labels": {"distance_m": 1}}
+    )
+    assert r.status_code == 202, r.text

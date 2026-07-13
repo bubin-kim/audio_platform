@@ -180,6 +180,73 @@ def test_replace_common_labels_override_inherited(
     assert all(s["labels"]["patient_id"] == "P02" for s in new_segs)
 
 
+# --- A1: 파일명 충돌 방지 (docs/12) ---
+
+
+def test_seq_continues_across_jobs_no_overwrite(
+    client: TestClient, make_wav: Callable[..., Path]
+) -> None:
+    """같은 조합을 두 번 녹음(원본 2개)해 별도 Job으로 커팅 — 사고 시나리오 (docs/12 A1).
+
+    seq가 dataset 누적으로 이어져 파일명이 겹치지 않고, 파일도 전부 실존해야 한다.
+    """
+    pid = client.post("/api/projects", json=_project_payload()).json()["id"]
+    ds_id = None
+    for name in ("rec_take1.wav", "rec_take2.wav"):
+        wav = make_wav(duration_sec=3.0, name=name)
+        up = upload_file(client, pid, wav, name)
+        ds_id = up["dataset_id"]
+        sfid = up["sources"][0]["id"]
+        r = client.post(
+            f"/api/datasets/{ds_id}/process",
+            json={
+                "source_file_ids": [sfid],
+                "common_labels": {"patient_id": "P01"},  # 같은 라벨(같은 조합)
+            },
+        )
+        assert r.status_code == 202, r.text
+
+    segs = client.get(f"/api/datasets/{ds_id}/segments?limit=100").json()["items"]
+    assert len(segs) == 6  # 3 + 3 (덮어쓰기 없이 누적)
+    filenames = [s["filename"] for s in segs]
+    assert len(set(filenames)) == 6, f"파일명 중복: {filenames}"
+    # seq가 이어짐: _001~_006
+    assert sorted(filenames)[-1].endswith("_006.wav")
+    # 스토리지에 6개 파일 전부 실존 + 경로 중복 없음
+    paths = [s["storage_path"] for s in segs]
+    assert len(set(paths)) == 6
+    assert all(client._storage.exists(p) for p in paths)
+
+
+def test_seq_start_recorded_in_job_params(
+    client: TestClient, make_wav: Callable[..., Path]
+) -> None:
+    """재현성: 이 Job의 seq 시작값이 params에 남는다."""
+    _, ds_id = _setup(client, make_wav)
+    jid = client.post(f"/api/datasets/{ds_id}/process").json()["id"]
+    job = client.get(f"/api/jobs/{jid}").json()
+    assert job["params"]["seq_start"] == 1
+
+
+def test_filename_collision_fails_explicitly(
+    client: TestClient, make_wav: Callable[..., Path]
+) -> None:
+    """충돌이 나면 조용한 덮어쓰기가 아니라 Job 실패 + 명확한 메시지 (docs/12 A1)."""
+    _, ds_id = _setup(client, make_wav)
+    # 미래 파일명 자리에 수동으로 파일을 만들어 충돌 유발
+    from datetime import date as _date
+
+    today = _date.today().strftime("%Y%m%d")
+    client._storage.save(f"segments/{ds_id}/{today}_001.wav", b"other file")
+
+    jid = client.post(f"/api/datasets/{ds_id}/process").json()["id"]
+    job = client.get(f"/api/jobs/{jid}").json()
+    assert job["status"] == "failed"
+    assert "파일명 충돌" in job["error_msg"]
+    # 기존 파일이 덮어써지지 않았다
+    assert client._storage.read(f"segments/{ds_id}/{today}_001.wav") == b"other file"
+
+
 def test_replace_deletes_old_files_from_storage(
     client: TestClient, make_wav: Callable[..., Path]
 ) -> None:
