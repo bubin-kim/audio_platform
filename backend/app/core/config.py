@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     app_name: str = "Audio Dataset Management Platform"
     api_prefix: str = "/api"
     # 프론트엔드 개발 서버 (CORS 허용 대상)
-    cors_origins: list[str] = ["http://localhost:3000"]
+    cors_origins: list[str] = ["http://localhost:3100"]
 
     # --- DB (MVP: SQLite / V2: PostgreSQL은 이 URL만 교체) ---
     database_url: str = f"sqlite:///{PROJECT_ROOT / 'audio_platform.db'}"

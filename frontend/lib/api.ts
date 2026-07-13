@@ -19,7 +19,7 @@ import type {
 } from "@/lib/types";
 
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8100/api";
 
 /** 공통 요청 헬퍼. 에러 응답(ErrorResponse)을 표준화해 던진다.
  *

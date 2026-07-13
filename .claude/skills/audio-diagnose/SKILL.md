@@ -32,7 +32,7 @@ docs/08_cutting_tuning.md(증상별 진단 표·심음 실전 사례) — 진단
 3. **파라미터 변경 제안**: 추천값과 근거(측정 수치)를 사용자에게 보여주고 승인받는다.
    승인 후 프로젝트 설정 변경은 API로:
    ```bash
-   curl -X PATCH http://localhost:8000/api/projects/<id> \
+   curl -X PATCH http://localhost:8100/api/projects/<id> \
      -H "Content-Type: application/json" \
      -d '{"cutting_params": {"silence_threshold_db": -35, "min_silence_sec": 0.3}}'
    ```

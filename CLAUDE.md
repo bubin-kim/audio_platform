@@ -103,7 +103,7 @@
 ## 8. 실행·검증 방법
 
 ```bash
-./scripts/dev.sh                      # 개발 서버 한 번에: backend :8000 + frontend :3000
+./scripts/dev.sh                      # 개발 서버 한 번에: backend :8100 + frontend :3100
                                       # 둘 다 저장 시 자동 반영, Ctrl-C 한 번에 종료
 cd backend && uv run pytest -q        # 백엔드 전체 테스트
 cd frontend && npm run build          # 프론트 타입체크 + 빌드

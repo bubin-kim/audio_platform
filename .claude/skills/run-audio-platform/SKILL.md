@@ -3,8 +3,8 @@ name: run-audio-platform
 description: Build, run, and browser-drive the Audio Dataset Platform (FastAPI backend + Next.js frontend). Use when asked to start the app, run the backend or frontend, take a screenshot of the UI, or click through a user flow (create project, upload, cut, export).
 ---
 
-This is a two-process web app (FastAPI backend on :8000, Next.js frontend
-on :3000). `chromium-cli` is not installed in this environment, so drive it
+This is a two-process web app (FastAPI backend on :8100, Next.js frontend
+on :3100). `chromium-cli` is not installed in this environment, so drive it
 with the Playwright REPL at `.claude/skills/run-audio-platform/driver.mjs`
 — it manages both dev servers (`up`/`down`) and drives the system-installed
 Google Chrome headlessly (`launch`, `nav`, `click`, `ss`, ...). A scripted
@@ -75,9 +75,9 @@ node driver.mjs down   # always stop the servers when you're done exploring
 | command | what it does |
 |---|---|
 | `up` | start backend (isolated temp SQLite db) + frontend, wait until both respond. If both are ALREADY responding (e.g. `scripts/dev.sh`), it reuses them and records that fact |
-| `down` | stop what `up` started, sweep ports 8000/3000, delete the temp db. Servers that were merely *reused* (or never started by the driver) are left running — it will never kill the user's own dev servers |
+| `down` | stop what `up` started, sweep ports 8100/3100, delete the temp db. Servers that were merely *reused* (or never started by the driver) are left running — it will never kill the user's own dev servers |
 | `launch` | launch headless Chrome (`channel: "chrome"`) + a page |
-| `nav <path>` | go to `http://localhost:3000<path>` |
+| `nav <path>` | go to `http://localhost:3100<path>` |
 | `ss [name]` | full-page screenshot → `screenshots/<name>.png` |
 | `click <css-selector>` | click the first match |
 | `click-text <text>` | click the first element containing this text |
@@ -96,8 +96,8 @@ node driver.mjs down   # always stop the servers when you're done exploring
 ## Run (human path)
 
 ```bash
-./scripts/dev.sh   # one terminal: backend :8000 (--reload) + frontend :3000 (HMR), Ctrl-C stops both
-# open http://localhost:3000
+./scripts/dev.sh   # one terminal: backend :8100 (--reload) + frontend :3100 (HMR), Ctrl-C stops both
+# open http://localhost:3100
 ```
 
 Both servers hot-reload on save (uvicorn `--reload`, `next dev`). Uses your
@@ -105,7 +105,7 @@ normal local `backend/audio_platform.db` and `data/`, unlike the driver's
 `up`, which is isolated per run. Equivalent manual form:
 
 ```bash
-cd backend && uv run alembic upgrade head && uv run uvicorn app.main:app --reload --port 8000
+cd backend && uv run alembic upgrade head && uv run uvicorn app.main:app --reload --port 8100
 cd frontend && npm run dev   # separate terminal
 ```
 
@@ -156,12 +156,12 @@ cd frontend && npm run build       # type-checks + builds
 - **A crashed/killed driver run leaves orphaned servers** (backend +
   frontend are spawned `detached` so they survive the driver process
   dying, e.g. from an agent's own command timeout). `up` sweeps ports
-  8000/3000 before starting *when the servers aren't healthy*; `down`
+  8100/3100 before starting *when the servers aren't healthy*; `down`
   kills and sweeps *only when its state file proves the driver started
   them* — it deliberately never kills healthy servers it didn't start
   (those are the user's own dev servers, e.g. `scripts/dev.sh`). If an
   orphan half-lives on a port after a killed run and `down` declines to
-  act, clear it manually: `lsof -i :3000 -sTCP:LISTEN -t | xargs kill`.
+  act, clear it manually: `lsof -i :3100 -sTCP:LISTEN -t | xargs kill`.
 
 - **`node driver.mjs smoke` takes ~30-45s** (migrations + two dev-server
   cold starts + a full click-through). Give it a generous timeout if
@@ -177,9 +177,9 @@ cd frontend && npm run build       # type-checks + builds
 
 ## Troubleshooting
 
-- **Frontend "port 3000 in use, trying 3001":** a previous run's
+- **Frontend "port 3100 in use, trying 3101":** a previous run's
   `next-server` child survived. Find and kill it:
-  `lsof -i :3000 -sTCP:LISTEN -t | xargs kill`. (`down` only sweeps ports
+  `lsof -i :3100 -sTCP:LISTEN -t | xargs kill`. (`down` only sweeps ports
   for servers the driver itself started.)
 - **`smoke` fails at the "커팅 시작" step / `input[type="number"]` not
   found:** the smoke script's seed project defines `distance_m` as a

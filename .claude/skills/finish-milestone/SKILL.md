@@ -21,7 +21,7 @@ description: 마일스톤(M, V2-N, D-MN) 완료 시 마무리 루틴 실행 — 
    ```
    전부 통과해야 다음 단계로. 실패 시 커밋하지 않고 실패 내용을 보고한다.
 3. **프론트 빌드** (프론트를 건드렸다면): dev 서버가 떠 있으면 안 된다
-   (`lsof -i :3000 -sTCP:LISTEN` 확인, run-audio-platform 스킬 Gotchas의 .next 함정).
+   (`lsof -i :3100 -sTCP:LISTEN` 확인, run-audio-platform 스킬 Gotchas의 .next 함정).
    ```bash
    cd frontend && npm run build
    ```

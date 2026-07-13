@@ -28,8 +28,8 @@ const STATE_FILE = path.join(__dirname, ".driver-state.json");
 const SHOT_DIR = process.env.SCREENSHOT_DIR || path.join(__dirname, "screenshots");
 fs.mkdirSync(SHOT_DIR, { recursive: true });
 
-const BACKEND_URL = "http://localhost:8000";
-const FRONTEND_URL = "http://localhost:3000";
+const BACKEND_URL = "http://localhost:8100";
+const FRONTEND_URL = "http://localhost:3100";
 
 let browser = null;
 let page = null;
@@ -89,9 +89,9 @@ async function up() {
   }
 
   // Stray `next dev`/`uvicorn` from a previous crashed run silently bumps
-  // the frontend to :3001 instead of failing loudly — always clear first.
-  killPort(8000);
-  killPort(3000);
+  // the frontend to :3101 instead of failing loudly — always clear first.
+  killPort(8100);
+  killPort(3100);
 
   const runId = `audio-platform-driver-${Date.now()}`;
   const dbPath = path.join(os.tmpdir(), `${runId}.db`);
@@ -113,8 +113,8 @@ async function up() {
     }).toString(),
   );
 
-  console.log("up: starting backend (uvicorn :8000)...");
-  const backendChild = spawnLogged("uv", ["run", "uvicorn", "app.main:app", "--port", "8000"], {
+  console.log("up: starting backend (uvicorn :8100)...");
+  const backendChild = spawnLogged("uv", ["run", "uvicorn", "app.main:app", "--port", "8100"], {
     cwd: BACKEND_DIR,
     env: { ...process.env, DATABASE_URL: dbUrl, DATA_DIR: dataDir },
     logPath: backendLog,
@@ -130,7 +130,7 @@ async function up() {
     fs.copyFileSync(path.join(FRONTEND_DIR, ".env.local.example"), envLocal);
   }
 
-  console.log("up: starting frontend (next dev :3000)...");
+  console.log("up: starting frontend (next dev :3100)...");
   const frontendChild = spawnLogged("npm", ["run", "dev"], {
     cwd: FRONTEND_DIR,
     env: process.env,
@@ -163,7 +163,7 @@ async function up() {
 
 async function down() {
   if (!fs.existsSync(STATE_FILE)) {
-    // No record of anything we started — a healthy server on 8000/3000 is
+    // No record of anything we started — a healthy server on 8100/3100 is
     // the user's own dev server (scripts/dev.sh); never kill it blindly.
     console.log("down: nothing started by the driver — leaving any running servers alone.");
     return;
@@ -190,10 +190,10 @@ async function down() {
   }
   // `npm run dev` spawns a detached `next-server` child that survives
   // killing the parent — sweep by port too, or the next `up` silently
-  // lands on :3001 (see Gotchas). Only safe here: this state file proves
+  // lands on :3101 (see Gotchas). Only safe here: this state file proves
   // the driver itself started these servers.
-  killPort(8000);
-  killPort(3000);
+  killPort(8100);
+  killPort(3100);
   console.log("down: stopped.");
 }
 
