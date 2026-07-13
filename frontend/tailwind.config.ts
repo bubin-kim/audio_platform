@@ -15,35 +15,35 @@ const config: Config = {
       colors: {
         // 회청색(Grayish-Blue) 스케일 — 배경·테두리·텍스트 위계
         surface: {
-          DEFAULT: "#f7f9fb", // 페이지 배경
+          DEFAULT: "#f6fafc", // 페이지 배경
           card: "#ffffff",     // 카드 배경
-          muted: "#eef2f6",    // 옅은 구역
+          muted: "#eaf3f8",    // 옅은 구역
         },
         border: {
-          DEFAULT: "#dbe2ea",
+          DEFAULT: "#d5e5ee",
         },
         content: {
           DEFAULT: "#2a3441", // 본문 텍스트
           muted: "#5b6b7d",   // 보조 텍스트
-          subtle: "#8896a5",  // 라벨/캡션
+          subtle: "#8a99a8",  // 라벨/캡션
         },
         // 강조색 (회청 톤의 blue)
         accent: {
-          DEFAULT: "#4a6fa5",
-          hover: "#3d5c8a",
-          soft: "#e3ebf5",
+          DEFAULT: "#6b93c4",
+          hover: "#5a82b3",
+          soft: "#e7f0f9",
         },
         // 상태색 (Job/진행률용)
         status: {
-          ok: "#3f8f6b",
-          warn: "#c08a2d",
-          error: "#c0503f",
+          ok: "#4d9c77",
+          warn: "#c39344",
+          error: "#c96a58",
         },
         // 대시보드 KPI 카드 등, 카드별로 구분이 필요할 때 순서대로 돌려 쓰는 톤 팔레트.
         chip: {
           1: "#D1EAF0",
           2: "#BCD4E6",
-          3: "#8BA8B7",
+          3: "#9DB8C6",
           4: "#AFDBF5",
         },
       },
