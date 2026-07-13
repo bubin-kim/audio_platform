@@ -41,6 +41,18 @@ node driver.mjs smoke
 
 Screenshots land in `.claude/skills/run-audio-platform/screenshots/`.
 
+**스크린샷 보존 규칙 (사용자 확정, 2026-07-13, N=20):** `smoke_01`~`smoke_04`는
+파일명이 고정이라 재실행 시 덮어쓰므로 정리 대상이 아니다. 수동 REPL로 찍은
+스크린샷(`sil_*`, `feat_*` 등 임의 이름)만 **최근 20개를 유지**한다 — 새 스크린샷을
+찍은 뒤 수동분이 20개를 넘으면 오래된 것부터 지운다:
+
+```bash
+cd .claude/skills/run-audio-platform
+ls -t screenshots/*.png | grep -v '/smoke_0[1-4]_' | tail -n +21 | xargs rm --
+```
+
+(macOS BSD xargs는 입력이 비면 rm을 실행하지 않으므로 20개 이하일 때도 안전하다.)
+
 For anything beyond the golden path (a specific page, a specific form,
 checking a bugfix), drive it interactively. Piped input works — each line
 runs to completion before the next starts:
