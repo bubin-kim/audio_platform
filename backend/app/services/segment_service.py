@@ -36,6 +36,13 @@ class SegmentService:
         peaks = waveform_peaks(storage.local_path(segment.storage_path), bins=bins)
         return segment, peaks
 
+    def delete(self, segment_id: int, storage: StorageBackend) -> None:
+        """세그먼트 1개 삭제 — 파일 + row (docs/12 B1)."""
+        segment = self.get(segment_id)
+        storage.delete(segment.storage_path)
+        self.repo.delete(segment)
+        self.db.commit()
+
     def update_labels(self, segment_id: int, labels: dict[str, Any]) -> Segment:
         """기존 labels 위에 부분 덮어쓰기 → schema 검증 → is_labeled 재계산."""
         segment = self.get(segment_id)

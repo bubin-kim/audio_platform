@@ -96,6 +96,39 @@ def test_create_project_invalid_enum_schema(client: TestClient) -> None:
     assert r.status_code == 422
 
 
+def test_create_project_rejects_empty_enum_options(client: TestClient) -> None:
+    """options:[''] 실사고 방어 (docs/12 C1) — 유효 옵션 0개·중복은 거부."""
+    for bad_options in ([""], ["  "], ["N", "N"]):
+        payload = _project_payload()
+        payload["label_schema"] = [
+            {"key": "dir", "type": "enum", "options": bad_options}
+        ]
+        r = client.post("/api/projects", json=payload)
+        assert r.status_code == 422, f"options={bad_options}가 통과됨"
+
+
+def test_create_project_filters_trailing_empty_option(client: TestClient) -> None:
+    """'N,S,' 같은 쉼표 꼬리 입력은 거부가 아니라 정규화된다 (빈 옵션만 제거)."""
+    payload = _project_payload()
+    payload["label_schema"] = [
+        {"key": "dir", "type": "enum", "options": ["N", ""], "required": False}
+    ]
+    r = client.post("/api/projects", json=payload)
+    assert r.status_code == 201
+    assert r.json()["label_schema"][0]["options"] == ["N"]
+
+
+def test_create_project_normalizes_enum_options(client: TestClient) -> None:
+    """유효 옵션은 공백이 정리(strip)되어 저장된다."""
+    payload = _project_payload()
+    payload["label_schema"] = [
+        {"key": "dir", "type": "enum", "options": [" N ", "S"], "required": False}
+    ]
+    r = client.post("/api/projects", json=payload)
+    assert r.status_code == 201
+    assert r.json()["label_schema"][0]["options"] == ["N", "S"]
+
+
 def test_upload_auto_creates_default_dataset(
     client: TestClient, make_wav: Callable[..., Path]
 ) -> None:

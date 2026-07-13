@@ -10,7 +10,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.audio.metadata import extract_metadata
-from app.core.exceptions import NotFoundError, ValidationError
+from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.hooks.events import on_upload_complete
 from app.models.source_file import SourceFile
 from app.repositories.history_repo import UploadHistoryRepository
@@ -93,6 +93,19 @@ class UploadService:
                 f"지원하지 않는 포맷 '{fmt}'. 지원: {sorted(ALLOWED_FORMATS)}"
             )
         safe_name = Path(uf.filename).name
+        # 중복 업로드 차단 (docs/12 B2): 같은 이름 재업로드는 파일을 덮어쓰고
+        # row만 중복 생성되던 실사고 재발 방지. 저장 전에 검사해 파일 훼손도 막는다.
+        duplicates = [
+            sf
+            for sf in self.source_repo.list_by_dataset(dataset_id)
+            if sf.filename == safe_name
+        ]
+        if duplicates:
+            raise ConflictError(
+                f"'{safe_name}'은 이미 이 Dataset에 업로드되어 있습니다"
+                f"(SourceFile id={duplicates[0].id}). 재업로드하려면 기존 원본을 "
+                "삭제(DELETE /source-files/{id})하거나 파일명을 바꾸세요."
+            )
         logical_path = f"uploads/{dataset_id}/{safe_name}"
         self.storage.save(logical_path, uf.data)
 

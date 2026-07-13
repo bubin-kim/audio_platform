@@ -10,8 +10,11 @@ from app.audio.cutting import available_strategies
 from app.core.exceptions import NotFoundError, ValidationError
 from app.hooks.events import on_project_created
 from app.models.project import Project
+from app.repositories.dataset_repo import DatasetRepository
 from app.repositories.project_repo import ProjectRepository
 from app.schemas.project import ProjectCreate, ProjectUpdate
+from app.services.dataset_service import DatasetService
+from app.storage.base import StorageBackend
 
 
 class ProjectService:
@@ -58,6 +61,25 @@ class ProjectService:
         self.db.commit()
         self.db.refresh(project)
         return project
+
+    def delete(
+        self, project_id: int, *, confirm: str, storage: StorageBackend
+    ) -> None:
+        """project 전체 삭제 (모든 dataset cascade + 파일). 이름 확인 필수 (docs/12 B1)."""
+        project = self.get(project_id)
+        if confirm != project.name:
+            raise ValidationError(
+                f"확인 이름이 일치하지 않습니다. project 이름 '{project.name}'을 "
+                "confirm 파라미터로 정확히 전달해야 삭제됩니다."
+            )
+        dataset_service = DatasetService(self.db)
+        for dataset in DatasetRepository(self.db).list_by_project(
+            project_id, limit=1000
+        ):
+            for path in dataset_service.collect_storage_paths(dataset):
+                storage.delete(path)
+        self.db.delete(project)  # datasets 이하 cascade
+        self.db.commit()
 
     def _validate_cutting_mode(self, mode: str) -> None:
         if mode not in available_strategies():

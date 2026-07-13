@@ -40,7 +40,8 @@ export function LabelSchemaEditor({
             onChange={(e) =>
               update(i, {
                 type: e.target.value as LabelType,
-                options: e.target.value === "enum" ? (field.options ?? [""]) : null,
+                // 기본값을 [""]로 두면 빈 옵션이 그대로 저장되는 사고가 난다(docs/12 C1)
+                options: e.target.value === "enum" ? (field.options ?? []) : null,
               })
             }
           >

@@ -21,8 +21,17 @@ class LabelFieldSchema(BaseModel):
 
     @model_validator(mode="after")
     def _check_enum_options(self) -> "LabelFieldSchema":
-        if self.type == "enum" and not self.options:
-            raise ValueError(f"enum 필드 '{self.key}'에는 options가 필요합니다.")
+        if self.type != "enum":
+            return self
+        # 빈 문자열/공백 옵션 거부 + 정규화 (docs/12 C1 — options:[''] 실사고 방어)
+        cleaned = [o.strip() for o in (self.options or []) if o and o.strip()]
+        if not cleaned:
+            raise ValueError(
+                f"enum 필드 '{self.key}'에는 비어 있지 않은 options가 최소 1개 필요합니다."
+            )
+        if len(set(cleaned)) != len(cleaned):
+            raise ValueError(f"enum 필드 '{self.key}'의 options에 중복이 있습니다.")
+        self.options = cleaned
         return self
 
 

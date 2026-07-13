@@ -6,7 +6,8 @@
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import get_db, get_storage_dep
+from app.storage.base import StorageBackend
 from app.schemas.common import Page
 from app.schemas.dataset import DatasetCreate, DatasetRead
 from app.schemas.project import ProjectCreate, ProjectRead, ProjectUpdate
@@ -61,6 +62,20 @@ def update_project(
     project_id: int, body: ProjectUpdate, db: Session = Depends(get_db)
 ) -> ProjectRead:
     return ProjectRead.model_validate(ProjectService(db).update(project_id, body))
+
+
+@router.delete(
+    "/projects/{project_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="프로젝트 전체 삭제 (confirm=프로젝트명 필수 — 하위 데이터·파일 포함)",
+)
+def delete_project(
+    project_id: int,
+    confirm: str = Query(..., description="실수 방지: 프로젝트 이름을 정확히 입력"),
+    db: Session = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage_dep),
+) -> None:
+    ProjectService(db).delete(project_id, confirm=confirm, storage=storage)
 
 
 # --- 중첩: 프로젝트의 데이터셋 ---

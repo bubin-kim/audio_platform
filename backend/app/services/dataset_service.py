@@ -20,7 +20,9 @@ from app.repositories.dataset_repo import DatasetRepository
 from app.repositories.job_repo import JobRepository
 from app.repositories.project_repo import ProjectRepository
 from app.repositories.segment_repo import SegmentRepository
+from app.repositories.source_file_repo import SourceFileRepository
 from app.schemas.dataset import DatasetCreate
+from app.storage.base import StorageBackend
 
 # 출처 컬럼(자기서술, docs/11 §4) + 자동 추출 메타데이터 컬럼(고정)
 # + 라벨 컬럼(Project.label_schema에서 동적으로 붙는다, P1).
@@ -92,6 +94,7 @@ class DatasetService:
         self.project_repo = ProjectRepository(db)
         self.job_repo = JobRepository(db)
         self.segment_repo = SegmentRepository(db)
+        self.source_repo = SourceFileRepository(db)
 
     def create(self, project_id: int, data: DatasetCreate) -> Dataset:
         self._ensure_project(project_id)
@@ -132,6 +135,49 @@ class DatasetService:
     def _ensure_project(self, project_id: int) -> None:
         if self.project_repo.get(project_id) is None:
             raise NotFoundError(f"Project {project_id}를 찾을 수 없습니다.")
+
+    # --- 삭제 (docs/12 B1) ---
+
+    def collect_storage_paths(self, dataset: Dataset) -> list[str]:
+        """dataset에 속한 모든 파일의 논리 경로 (세그먼트 + 원본 + export 결과물)."""
+        paths = [s.storage_path for s in self.segment_repo.all_for_dataset(dataset.id)]
+        paths += [sf.storage_path for sf in self.source_repo.list_by_dataset(dataset.id)]
+        paths += [
+            j.result_path
+            for j in self.job_repo.list_by_dataset(dataset.id, limit=1000)
+            if j.type == "export" and j.result_path
+        ]
+        return paths
+
+    def delete_source_file(self, source_file_id: int, storage: StorageBackend) -> None:
+        """원본 1개 삭제. 참조하는 세그먼트가 있으면 409 (먼저 정리 유도)."""
+        source = self.source_repo.get(source_file_id)
+        if source is None:
+            raise NotFoundError(f"SourceFile {source_file_id}를 찾을 수 없습니다.")
+        refs = self.segment_repo.list_by_source_file(source_file_id)
+        if refs:
+            raise ConflictError(
+                f"세그먼트 {len(refs)}개가 이 원본을 참조합니다. "
+                "세그먼트를 먼저 삭제하거나 replace_existing 재커팅으로 정리하세요."
+            )
+        storage.delete(source.storage_path)
+        self.source_repo.delete(source)
+        self.db.commit()
+
+    def delete_dataset(
+        self, dataset_id: int, *, confirm: str, storage: StorageBackend
+    ) -> None:
+        """dataset 전체 삭제 (cascade + 파일). 이름 확인 필수 — 실수 방지."""
+        dataset = self.get(dataset_id)
+        if confirm != dataset.name:
+            raise ValidationError(
+                f"확인 이름이 일치하지 않습니다. dataset 이름 '{dataset.name}'을 "
+                "confirm 파라미터로 정확히 전달해야 삭제됩니다."
+            )
+        for path in self.collect_storage_paths(dataset):
+            storage.delete(path)
+        self.db.delete(dataset)  # segments/source_files/jobs cascade
+        self.db.commit()
 
     # export 경로 패턴이 쓸 수 있는 필드 (docs/11 §2 — worker가 채운다)
     _EXPORT_PATTERN_FIELDS = {

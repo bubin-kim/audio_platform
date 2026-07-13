@@ -56,14 +56,18 @@
 | | POST | `/api/projects` | 생성(도메인 설정 포함) | 201 |
 | | GET | `/api/projects/{id}` | 상세 | 200 |
 | | PATCH | `/api/projects/{id}` | 설정 수정 | 200 |
+| | DELETE | `/api/projects/{id}?confirm=이름` | 전체 삭제 (하위+파일, 이름 확인 필수) | 204/400 |
 | Dataset | GET | `/api/projects/{id}/datasets` | 프로젝트의 데이터셋 목록 | 200 |
 | | POST | `/api/projects/{id}/datasets` | 데이터셋 생성 | 201 |
 | | GET | `/api/datasets/{id}` | 상세 | 200 |
 | | GET | `/api/datasets/{id}/segments` | 세그먼트 목록 | 200 |
 | | GET | `/api/datasets/{id}/export` | Metadata.csv 내보내기(비동기) | 202 |
 | | GET | `/api/datasets/{id}/export/download` | 최근 완료된 CSV 다운로드 | 200 |
+| | DELETE | `/api/datasets/{id}?confirm=이름` | 데이터셋 삭제 (세그먼트·원본·CSV 포함) | 204/400 |
 | Segment | GET | `/api/segments/{id}/waveform` | 미니 파형 피크 (시각 비교용) | 200 |
+| | DELETE | `/api/segments/{id}` | 세그먼트 1개 삭제 (파일 포함) | 204 |
 | Upload | POST | `/api/uploads` | 원본 업로드(+메타추출) | 201 |
+| | DELETE | `/api/source-files/{id}` | 원본 삭제 (참조 세그먼트 있으면 409) | 204/409 |
 | Processing | POST | `/api/datasets/{id}/process` | 커팅 Job 시작 | 202 |
 | Job | GET | `/api/jobs/{id}` | Job 상태·진행률 | 200 |
 | | GET | `/api/datasets/{id}/jobs` | 데이터셋의 Job 목록 | 200 |
@@ -196,6 +200,19 @@ Dataset의 모든 Segment를 CSV로 생성. 큰 데이터셋 대비 **Job으로 
 - 메타 추출은 빠르므로(헤더 읽기) 업로드 응답에 **동기 포함**. 커팅만 비동기.
 
 **검증(400)**: 지원하지 않는 포맷, `project_id` 미존재.
+**충돌(409)**: 같은 Dataset에 **같은 파일명이 이미 존재**하면 거부 — 파일을 덮어쓰고
+row만 중복되던 사고 방지(docs/12 B2). 재업로드는 기존 원본 삭제 후, 또는 다른 파일명으로.
+
+### 5.2 DELETE — 삭제 계약 (docs/12 B1)
+| 엔드포인트 | 규칙 |
+|---|---|
+| `DELETE /api/segments/{id}` | 세그먼트 1개 + 파일. 204 |
+| `DELETE /api/source-files/{id}` | 참조 세그먼트 있으면 **409**(먼저 정리 유도). 204 |
+| `DELETE /api/datasets/{id}?confirm=<데이터셋명>` | 이름 불일치 **400**. 세그먼트·원본·export CSV 파일까지 일괄 삭제. 204 |
+| `DELETE /api/projects/{id}?confirm=<프로젝트명>` | 이름 불일치 **400**. 모든 dataset 연쇄 삭제. 204 |
+
+- confirm은 **URL 인코딩 필수** (한글 이름을 curl로 보낼 때 `--data-urlencode` — 미인코딩 시 HTTP 파서가 400으로 거부).
+- Drive 미러 대상 파일(exports/)은 미러 쪽도 함께 삭제된다(MirrorStorage).
 
 ---
 

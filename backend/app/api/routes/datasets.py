@@ -147,6 +147,33 @@ def get_segment_waveform(
     )
 
 
+@router.delete(
+    "/datasets/{dataset_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="데이터셋 전체 삭제 (confirm=데이터셋명 필수 — 세그먼트·원본·CSV 포함)",
+)
+def delete_dataset(
+    dataset_id: int,
+    confirm: str = Query(..., description="실수 방지: 데이터셋 이름을 정확히 입력"),
+    db: Session = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage_dep),
+) -> None:
+    DatasetService(db).delete_dataset(dataset_id, confirm=confirm, storage=storage)
+
+
+@router.delete(
+    "/segments/{segment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="세그먼트 1개 삭제 (파일 포함)",
+)
+def delete_segment(
+    segment_id: int,
+    db: Session = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage_dep),
+) -> None:
+    SegmentService(db).delete(segment_id, storage)
+
+
 @router.patch(
     "/segments/{segment_id}/labels",
     response_model=SegmentRead,

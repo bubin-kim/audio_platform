@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_storage_dep
 from app.schemas.upload import SourceRead, UploadResult
+from app.services.dataset_service import DatasetService
 from app.services.upload_service import UploadedFile, UploadService
 from app.storage.base import StorageBackend
 
@@ -39,3 +40,16 @@ async def upload_files(
         created_dataset=created,
         sources=[SourceRead.model_validate(s) for s in sources],
     )
+
+
+@router.delete(
+    "/source-files/{source_file_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="원본 파일 삭제 (참조 세그먼트 있으면 409)",
+)
+def delete_source_file(
+    source_file_id: int,
+    db: Session = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage_dep),
+) -> None:
+    DatasetService(db).delete_source_file(source_file_id, storage)
