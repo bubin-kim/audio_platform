@@ -49,6 +49,7 @@ def client(tmp_path: Path) -> TestClient:
     app.dependency_overrides[get_storage_dep] = lambda: storage
     with TestClient(app) as c:
         c._storage = storage  # 테스트에서 접근용
+        c._session_factory = TestSession  # 레거시 데이터 직접 삽입용 (API 검증 우회)
         yield c
     app.dependency_overrides.clear()
 
@@ -207,3 +208,38 @@ def test_upload_missing_project_404(
             files={"files": ("x.wav", f, "audio/wav")},
         )
     assert r.status_code == 404
+
+
+def test_read_project_with_legacy_empty_enum_options(client: TestClient) -> None:
+    """C1 검증 도입 전에 저장된 options:[''] 레거시 행도 조회는 500 없이 된다.
+
+    입력(생성/수정)은 엄격하게 거부하되, 이미 DB에 있는 과거 데이터의 조회를
+    막으면 안 된다 (실사고: /projects 전체가 500으로 죽음, 2026-07-13).
+    """
+    from app.models.project import Project
+
+    session = client._session_factory()
+    try:
+        legacy = Project(
+            name="레거시 심음",
+            domain="heart",
+            cutting_mode="fixed_interval",
+            cutting_params={"interval_sec": 3},
+            naming_pattern="{date}_{seq:03d}",
+            label_schema=[
+                {"key": "patient_id", "type": "string", "required": True, "options": None},
+                {"key": "valve", "type": "enum", "required": False, "options": [""]},
+            ],
+        )
+        session.add(legacy)
+        session.commit()
+        legacy_id = legacy.id
+    finally:
+        session.close()
+
+    r = client.get("/api/projects")
+    assert r.status_code == 200, r.text
+    r2 = client.get(f"/api/projects/{legacy_id}")
+    assert r2.status_code == 200, r2.text
+    # 저장된 그대로 내려준다 (읽기는 관대 — 고치는 건 사용자가 설정 수정으로)
+    assert r2.json()["label_schema"][1]["options"] == [""]

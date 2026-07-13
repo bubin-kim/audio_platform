@@ -12,15 +12,24 @@ LabelType = Literal["string", "number", "enum", "bool"]
 
 
 class LabelFieldSchema(BaseModel):
-    """label_schema의 한 필드 정의. Project가 요구하는 라벨의 형태(05 §2)."""
+    """label_schema의 한 필드 정의. Project가 요구하는 라벨의 형태(05 §2).
+
+    검증 없는 기본형 — **읽기(ProjectRead)용**. C1 검증 도입 전에 저장된
+    레거시 행(예: options=[''])도 조회는 500 없이 그대로 직렬화돼야 한다.
+    입력 검증은 LabelFieldSchemaIn이 담당한다 (쓰기는 엄격, 읽기는 관대).
+    """
 
     key: str
     type: LabelType
     required: bool = False
     options: list[str] | None = None  # type=="enum"일 때 필수
 
+
+class LabelFieldSchemaIn(LabelFieldSchema):
+    """생성/수정 입력용 — 빈 enum 방어 검증 포함 (docs/12 C1)."""
+
     @model_validator(mode="after")
-    def _check_enum_options(self) -> "LabelFieldSchema":
+    def _check_enum_options(self) -> "LabelFieldSchemaIn":
         if self.type != "enum":
             return self
         # 빈 문자열/공백 옵션 거부 + 정규화 (docs/12 C1 — options:[''] 실사고 방어)
@@ -41,7 +50,7 @@ class ProjectCreate(BaseModel):
     cutting_mode: str
     cutting_params: dict[str, Any] = Field(default_factory=dict)
     naming_pattern: str = Field(min_length=1)
-    label_schema: list[LabelFieldSchema] = Field(default_factory=list)
+    label_schema: list[LabelFieldSchemaIn] = Field(default_factory=list)
     target_duration_sec: float | None = Field(default=None, gt=0)
 
 
@@ -53,7 +62,7 @@ class ProjectUpdate(BaseModel):
     cutting_mode: str | None = None
     cutting_params: dict[str, Any] | None = None
     naming_pattern: str | None = Field(default=None, min_length=1)
-    label_schema: list[LabelFieldSchema] | None = None
+    label_schema: list[LabelFieldSchemaIn] | None = None
     target_duration_sec: float | None = Field(default=None, gt=0)
 
 

@@ -146,6 +146,7 @@ def client(tmp_path: Path) -> TestClient:
     worker_module.get_storage = lambda: storage
     with TestClient(app) as c:
         c._storage = storage
+        c._session_factory = TestSession  # 레거시 데이터 직접 삽입용 (API 검증 우회)
         yield c
     worker_module.SessionLocal = original_session_local
     worker_module.get_storage = original_get_storage
