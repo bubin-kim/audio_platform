@@ -57,6 +57,7 @@
 | 10_reprocessing_labels.md | V2-4 재처리 안전장치(409 가드·라벨 승계) 설계 | 재커팅/라벨 흐름 변경 전 |
 | 11_csv_export.md | V2-5 CSV export(경로 패턴·출처 컬럼·반올림) 설계 | export 형식 변경 전 |
 | 12_gap_analysis.md | 갭 감사·개선 설계 (P0~P2, 보류 항목 포함) | 개선 작업 재개 시 |
+| 13_deployment.md | DP 배포 설계 (Vercel+Railway+Drive 주 저장소·인증) | 배포 작업 시 |
 
 큰 기능은 이 패턴을 따른다: **설계 문서(docs/NN)를 먼저 쓰고 사용자 승인 → 문서대로 구현**
 (06→MVP, 07→V2-1, 09→V2-3, 10→V2-4, 11→V2-5 전부 이렇게 진행됨).
@@ -166,6 +167,8 @@ cd frontend && npm run build          # 프론트 타입체크 + 빌드
 - ✅ **G-M3**: 재처리·라벨 편집·삭제 프론트 UI 완료 2026-07-13 — `1dcd6c9`
   (B3 대체 재커팅 패널 + C2 인라인 라벨 편집 + B1 삭제 UI 3종.
   실서버 브라우저 검증 9/9. 수집 전으로 앞당김 — 사용자 결정. **보류**: P2(G-M4))
+- 🔄 **DP**: 배포 (Vercel+Railway+Drive 주 저장소) — 설계 docs/13 승인 2026-07-13,
+  **DP-M1(Postgres 전환)부터 진행 중**
 - **최신 마일스톤 커밋**: `1dcd6c9` (G-M3)
 - 남은 V2 자리: GitHub(Dataset 버전), AI Assistant, Auth.
 
