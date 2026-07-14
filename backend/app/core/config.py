@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     storage_mode: str = "local"
     cache_dir: str = str(PROJECT_ROOT / ".drive_cache")
     cache_max_mb: float = 2048
+    # 업로드 요청 총 크기 상한 (docs/13 §7 — 배포 실측 후 조정)
+    max_upload_mb: float = 200
     drive_timeout_sec: float = 30.0
 
     # --- CSV export 경로 패턴 (V2-5, docs/11 §2) ---

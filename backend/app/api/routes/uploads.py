@@ -7,6 +7,8 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_storage_dep
+from app.core.config import get_settings
+from app.core.exceptions import PayloadTooLargeError
 from app.schemas.upload import SourceRead, UploadResult
 from app.services.dataset_service import DatasetService
 from app.services.upload_service import UploadedFile, UploadService
@@ -32,6 +34,14 @@ async def upload_files(
         UploadedFile(filename=f.filename or "unnamed", data=await f.read())
         for f in files
     ]
+    # 업로드 총 크기 상한 (docs/13 §7). 대형 파일 최적화는 비목표 — 정책으로 관리.
+    limit_mb = get_settings().max_upload_mb
+    total_mb = sum(len(u.data) for u in uploaded) / (1024 * 1024)
+    if total_mb > limit_mb:
+        raise PayloadTooLargeError(
+            f"업로드 총 {total_mb:.0f}MB가 상한 {limit_mb:.0f}MB를 넘습니다. "
+            "파일을 나눠 올리거나 관리자에게 MAX_UPLOAD_MB 조정을 요청하세요."
+        )
     ds_id, created, sources = UploadService(db, storage).register_uploads(
         project_id=project_id, files=uploaded, dataset_id=dataset_id
     )

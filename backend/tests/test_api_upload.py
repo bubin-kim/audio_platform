@@ -243,3 +243,27 @@ def test_read_project_with_legacy_empty_enum_options(client: TestClient) -> None
     assert r2.status_code == 200, r2.text
     # 저장된 그대로 내려준다 (읽기는 관대 — 고치는 건 사용자가 설정 수정으로)
     assert r2.json()["label_schema"][1]["options"] == [""]
+
+
+def test_upload_over_size_limit_413(
+    client: TestClient, make_wav: Callable[..., Path]
+) -> None:
+    """업로드 총 크기 상한 (docs/13 §7) — 초과 시 413 + 안내 메시지."""
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    original = settings.max_upload_mb
+    settings.max_upload_mb = 0.01  # 10KB 상한으로 강제
+    try:
+        pid = client.post("/api/projects", json=_project_payload()).json()["id"]
+        wav = make_wav(duration_sec=2.0, name="big.wav")  # 수십 KB > 상한
+        with wav.open("rb") as f:
+            r = client.post(
+                "/api/uploads",
+                data={"project_id": pid},
+                files={"files": ("big.wav", f, "audio/wav")},
+            )
+        assert r.status_code == 413
+        assert "상한" in r.json()["detail"]
+    finally:
+        settings.max_upload_mb = original
