@@ -7,6 +7,7 @@ SQLite→PostgreSQL 전환은 DATABASE_URL 교체만으로 이뤄진다(P3).
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/ 디렉터리 (이 파일 기준 2단계 위: core -> app -> backend)
@@ -34,6 +35,18 @@ class Settings(BaseSettings):
 
     # --- DB (MVP: SQLite / V2: PostgreSQL은 이 URL만 교체) ---
     database_url: str = f"sqlite:///{PROJECT_ROOT / 'audio_platform.db'}"
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalize_pg_scheme(cls, v: str) -> str:
+        """Railway 등이 주는 postgresql:// 를 psycopg 드라이버 스킴으로 정규화.
+
+        SQLAlchemy는 postgresql:// 를 psycopg2(미설치)로 해석하므로 그대로 두면
+        배포 첫 기동에서 죽는다 (docs/13 §7).
+        """
+        if v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+psycopg://", 1)
+        return v
 
     # --- 로컬 저장소 경로 (V2: Drive로 대체되므로 Storage 인터페이스 경유) ---
     data_dir: Path = PROJECT_ROOT / "data"

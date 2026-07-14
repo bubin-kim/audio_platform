@@ -159,3 +159,11 @@ def test_drive_primary_with_tokens_builds_cached(tmp_path: Path) -> None:
 def test_unknown_mode_rejected() -> None:
     with pytest.raises(ValueError, match="STORAGE_MODE"):
         build_storage(_settings(storage_mode="s3"))
+
+
+def test_database_url_scheme_normalized() -> None:
+    """Railway가 주는 postgresql:// → psycopg 드라이버 스킴으로 정규화 (docs/13 §7)."""
+    s = Settings(database_url="postgresql://u:p@host:5432/db")
+    assert s.database_url == "postgresql+psycopg://u:p@host:5432/db"
+    s2 = Settings(database_url="sqlite:///x.db")
+    assert s2.database_url == "sqlite:///x.db"
