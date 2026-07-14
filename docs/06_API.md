@@ -48,7 +48,19 @@
 
 ---
 
-## 2. 엔드포인트 목록 (요약)
+## 2. 인증 (docs/13 §6 — 배포 환경 전용)
+
+`ACCESS_TOKEN`(백엔드 env)이 설정된 경우에만 활성화된다. **미설정이면 이 절은 없는
+것과 같다** (로컬 개발 기본).
+
+- `/api/*` 전 요청: `Authorization: Bearer <token>` 필수. 불일치 → **401**
+  `{"detail": "액세스 토큰이 필요합니다.", "code": "UNAUTHORIZED"}`.
+- 예외: `/health`(무인증), CORS preflight(OPTIONS).
+- 미디어 URL 3종은 `?token=<token>` 쿼리도 허용 (브라우저 네이티브 로딩이 헤더를
+  못 붙이므로): `/api/segments/{id}/audio` · `/api/segments/{id}/waveform` ·
+  `/api/datasets/{id}/export/download`. **그 외 경로는 쿼리 토큰을 받지 않는다.**
+
+## 2b. 엔드포인트 목록 (요약)
 
 | 영역 | Method | Path | 설명 | 코드 |
 |---|---|---|---|---|

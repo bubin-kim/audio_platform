@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     # --- 앱 ---
     app_name: str = "Audio Dataset Management Platform"
     api_prefix: str = "/api"
+    # 공용 액세스 토큰 (docs/13 §6). 비어 있으면 인증 비활성 = 기존과 동일 동작(P4 패턴).
+    access_token: str = ""
     # 프론트엔드 개발 서버 (CORS 허용 대상)
     cors_origins: list[str] = ["http://localhost:3100"]
 

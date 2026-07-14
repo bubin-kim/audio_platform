@@ -4,6 +4,7 @@
  * 주소가 바뀌어도 이 파일만 고치면 된다.
  */
 
+import { getClientToken } from "@/lib/auth";
 import type {
   Dataset,
   DatasetCreate,
@@ -32,22 +33,52 @@ export class ApiRequestError extends Error {
   }
 }
 
+/** 액세스 토큰 헤더 (docs/13 §6). 브라우저는 쿠키에서, SSR은 next/headers에서 읽는다. */
+async function authHeaders(): Promise<Record<string, string>> {
+  let token: string | undefined;
+  if (typeof window === "undefined") {
+    try {
+      // 서버 컴포넌트 전용 모듈이라 동적 import (클라이언트 번들에서 실행되지 않음)
+      const { cookies } = await import("next/headers");
+      token = (await cookies()).get("access_token")?.value;
+    } catch {
+      token = undefined; // 요청 컨텍스트 밖(빌드 등)에서는 토큰 없음
+    }
+  } else {
+    token = getClientToken();
+  }
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/** 미디어 URL(<audio src>·<a href>)은 헤더를 못 붙이므로 쿼리 토큰을 부착한다. */
+function withToken(url: string): string {
+  if (typeof window === "undefined") return url;
+  const token = getClientToken();
+  if (!token) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
+}
+
 /** 공통 요청 헬퍼. 에러 응답(ErrorResponse)을 표준화해 던진다.
  *
  * 대시보드류 데이터는 자주 바뀌므로 기본은 캐시하지 않는다(no-store).
  * FormData 바디는 브라우저가 boundary를 채운 Content-Type을 스스로 붙이도록
  * 기본 JSON 헤더를 건너뛴다. 204(No Content)는 본문 파싱 없이 undefined를 돌려준다.
+ * 401 수신 시(브라우저) 토큰 입력 화면으로 보낸다.
  */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const isFormData = init?.body instanceof FormData;
+  const auth = await authHeaders();
   const res = await fetch(`${API_BASE}${path}`, {
     cache: "no-store",
     ...init,
     headers: isFormData
-      ? init?.headers
-      : { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      ? { ...auth, ...(init?.headers ?? {}) }
+      : { "Content-Type": "application/json", ...auth, ...(init?.headers ?? {}) },
   });
   if (!res.ok) {
+    if (res.status === 401 && typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
     const detail = await res.json().catch(() => ({ detail: res.statusText }));
     throw new ApiRequestError(
       detail.detail ?? `Request failed: ${res.status}`,
@@ -56,6 +87,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+/** 로그인 화면에서 토큰 유효성 확인 — 401 리다이렉트 없이 직접 검사한다. */
+export async function verifyToken(token: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/projects?limit=1`, {
+      cache: "no-store",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 function qs(params: Record<string, string | number | undefined>): string {
@@ -133,7 +177,7 @@ export const updateSegmentLabels = (
 
 /** 세그먼트 오디오는 브라우저 <audio>가 직접 스트리밍하는 URL이다. */
 export const segmentAudioUrl = (segmentId: number) =>
-  `${API_BASE}/segments/${segmentId}/audio`;
+  withToken(`${API_BASE}/segments/${segmentId}/audio`);
 
 /** 미니 파형 피크 (06_API.md §4.5). 불변 데이터라 브라우저 캐시 허용. */
 export const getSegmentWaveform = (segmentId: number) =>
@@ -172,7 +216,7 @@ export const startExport = (datasetId: number) =>
 
 /** 다운로드는 JSON 왕복이 아니라 브라우저가 직접 여는 URL이다(<a href>). */
 export const downloadExportUrl = (datasetId: number) =>
-  `${API_BASE}/datasets/${datasetId}/export/download`;
+  withToken(`${API_BASE}/datasets/${datasetId}/export/download`);
 
 // --- Stats ---
 export const getStats = (projectId?: number) =>

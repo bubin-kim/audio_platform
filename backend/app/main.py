@@ -7,6 +7,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+
+from app.core.auth import access_token_guard
 from fastapi.responses import JSONResponse
 
 from app.api.routes import datasets, processing, projects, stats, uploads
@@ -32,6 +34,9 @@ app = FastAPI(
     summary="오디오 수집→커팅→메타데이터→데이터셋→통계 자동화 플랫폼 (MVP)",
     lifespan=_lifespan,
 )
+
+# 공용 액세스 토큰 가드 (docs/13 §6) — ACCESS_TOKEN 미설정 시 no-op 통과.
+app.middleware("http")(access_token_guard)
 
 app.add_middleware(
     CORSMiddleware,
