@@ -25,6 +25,7 @@ class _DriveRecorder:
         # (name, parent) → id. 폴더/파일 존재 시뮬레이션.
         self.folders: dict[tuple[str, str], str] = {}
         self.files: dict[tuple[str, str], str] = {}
+        self.contents: dict[str, bytes] = {}  # file id → 바이트 (다운로드 응답용)
         self._seq = 0
 
     def _new_id(self, kind: str) -> str:
@@ -40,6 +41,12 @@ class _DriveRecorder:
             return httpx.Response(
                 200, json={"access_token": f"tok-{self.token_calls}", "expires_in": 3600}
             )
+
+        if request.method == "GET" and request.url.params.get("alt") == "media":
+            fid = url.split("/files/")[1].split("?")[0]
+            if fid not in self.contents:
+                return httpx.Response(404, json={"error": "not found"})
+            return httpx.Response(200, content=self.contents[fid])
 
         if request.method == "GET" and "/drive/v3/files" in url:
             # 검색 쿼리 파싱: name = 'X' and 'PARENT' in parents ... mimeType =/!= folder
@@ -63,15 +70,19 @@ class _DriveRecorder:
             return httpx.Response(200, json={"id": fid})
 
         if request.method == "POST" and "/upload/drive/v3/files" in url:
-            # multipart 신규 업로드 — 메타데이터 파트에서 name/parents 추출
+            # multipart 신규 업로드 — 메타데이터 파트에서 name/parents, 바디에서 바이트
             raw = request.content.decode(errors="ignore")
             meta = json.loads(raw.split("\r\n\r\n")[1].split("\r\n")[0])
             fid = self._new_id("file")
             self.files[(meta["name"], meta["parents"][0])] = fid
+            parts = request.content.split(b"\r\n\r\n")
+            self.contents[fid] = parts[2].rsplit(b"\r\n--", 1)[0] if len(parts) > 2 else b""
             return httpx.Response(200, json={"id": fid})
 
         if request.method == "PATCH" and "/upload/drive/v3/files/" in url:
-            return httpx.Response(200, json={"id": url.rsplit("/", 1)[-1].split("?")[0]})
+            fid = url.rsplit("/", 1)[-1].split("?")[0]
+            self.contents[fid] = request.content
+            return httpx.Response(200, json={"id": fid})
 
         if request.method == "DELETE" and "/drive/v3/files/" in url:
             return httpx.Response(204)
@@ -152,10 +163,18 @@ def test_delete_removes_existing_file() -> None:
     assert len(deletes) == 1
 
 
-def test_read_paths_not_supported() -> None:
+def test_read_write_roundtrip_and_missing() -> None:
+    """DP-M3: read/exists 지원 — 저장한 걸 그대로 읽고, 없으면 FileNotFoundError."""
     d = _drive(_DriveRecorder())
+    d.save("exports/1/a.csv", b"x,y\n1,2\n")
+    assert d.read("exports/1/a.csv") == b"x,y\n1,2\n"
+    assert d.exists("exports/1/a.csv") is True
+    assert d.exists("exports/1/missing.csv") is False
+    with pytest.raises(FileNotFoundError):
+        d.read("exports/1/missing.csv")
+    # 로컬 경로·list는 캐시 계층(CachedDriveStorage) 담당
     with pytest.raises(NotImplementedError):
-        d.read("exports/1/a.csv")
+        d.local_path("exports/1/a.csv")
 
 
 # --- MirrorStorage 단위 ---

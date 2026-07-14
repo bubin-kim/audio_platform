@@ -1,8 +1,8 @@
 """GoogleDriveStorage — Drive REST API 미러 구현 (V2-3, docs/09 §3).
 
-MirrorStorage의 미러 대상 전용: save/save_from_path/delete만 실제 구현한다.
-읽기 계열(read/local_path/exists/list)은 완전 교체 모드가 비목표(09 §1)라
-NotImplementedError — 읽기는 항상 로컬(MirrorStorage가 위임)이다.
+save/save_from_path/delete(미러, V2-3)에 더해 read/exists를 구현한다(DP-M3,
+docs/13 §4 — drive_primary 모드의 진실 원천). local_path/list는 이 클래스가 아니라
+CachedDriveStorage(캐시 계층)가 담당한다.
 
 공유 드라이브 전환 대비(09 §2): 모든 호출에 supportsAllDrives=true,
 토큰 발급은 _get_access_token() 하나로 격리(SA 전환 시 이 함수만 교체).
@@ -232,16 +232,31 @@ class GoogleDriveStorage(StorageBackend):
         if file_id is not None:
             self._request("DELETE", f"{DRIVE_API_URL}/files/{file_id}")
 
-    # --- 읽기 계열: 완전 교체 모드는 비목표(09 §1) — 읽기는 항상 로컬 ---
+    # --- 읽기 계열 (DP-M3, docs/13 §4) ---
+
+    def _find_file_id(self, path: str) -> str | None:
+        """논리 경로의 파일 ID. 폴더/파일이 없으면 None (폴더를 만들지 않는다)."""
+        logical = path.lstrip("/")
+        dir_path, _, filename = logical.rpartition("/")
+        parent_id = self._resolve_folder(dir_path, create=False)
+        if parent_id is None:
+            return None
+        return self._find_child(filename, parent_id, folder=False)
 
     def read(self, path: str) -> bytes:
-        raise NotImplementedError("Drive 읽기는 미지원 — 읽기는 로컬(MirrorStorage) 담당")
-
-    def local_path(self, path: str) -> Path:
-        raise NotImplementedError("Drive 읽기는 미지원 — 읽기는 로컬(MirrorStorage) 담당")
+        file_id = self._find_file_id(path)
+        if file_id is None:
+            raise FileNotFoundError(f"Drive에 없음: {path}")
+        res = self._request(
+            "GET", f"{DRIVE_API_URL}/files/{file_id}", params={"alt": "media"}
+        )
+        return res.content
 
     def exists(self, path: str) -> bool:
-        raise NotImplementedError("Drive 읽기는 미지원 — 읽기는 로컬(MirrorStorage) 담당")
+        return self._find_file_id(path) is not None
+
+    def local_path(self, path: str) -> Path:
+        raise NotImplementedError("로컬 경로는 캐시 계층(CachedDriveStorage) 담당")
 
     def list(self, prefix: str = "") -> list[str]:
-        raise NotImplementedError("Drive 읽기는 미지원 — 읽기는 로컬(MirrorStorage) 담당")
+        raise NotImplementedError("코어 흐름 미사용 — 필요해지면 구현 (docs/13 §4)")

@@ -58,6 +58,13 @@ class Settings(BaseSettings):
     drive_root_folder_id: str = ""
     # 미러 대상 prefix. wav가 필요해지면 "segments" 추가만으로 활성화(코드 변경 0).
     drive_mirror_prefixes: list[str] = ["exports"]
+
+    # --- 저장소 모드 (docs/13 §4) ---
+    # local(기본): 로컬 디스크 주 저장소 (+ Drive 설정 시 exports 미러 = 기존 동작)
+    # drive_primary: Drive가 진실 원천, 로컬은 LRU 캐시 (배포용 — Drive 4종 설정 필수)
+    storage_mode: str = "local"
+    cache_dir: str = str(PROJECT_ROOT / ".drive_cache")
+    cache_max_mb: float = 2048
     drive_timeout_sec: float = 30.0
 
     # --- CSV export 경로 패턴 (V2-5, docs/11 §2) ---
