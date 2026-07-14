@@ -168,7 +168,8 @@ cd frontend && npm run build          # 프론트 타입체크 + 빌드
   (B3 대체 재커팅 패널 + C2 인라인 라벨 편집 + B1 삭제 UI 3종.
   실서버 브라우저 검증 9/9. 수집 전으로 앞당김 — 사용자 결정. **보류**: P2(G-M4))
 - 🔄 **DP**: 배포 (Vercel+Railway+Drive 주 저장소, 설계 docs/13) —
-  **DP-M1 완료**(Postgres 전환 검증, psycopg 추가 — `8c72fce`). 다음: DP-M2(인증)
+  **DP-M1 완료**(Postgres, `8c72fce`) · **DP-M2 완료**(공용 토큰 인증, `6b54251`).
+  다음: DP-M3(CachedDriveStorage 주 저장소 승격)
 - **최신 마일스톤 커밋**: `1dcd6c9` (G-M3)
 - 남은 V2 자리: GitHub(Dataset 버전), AI Assistant, Auth.
 
