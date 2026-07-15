@@ -169,7 +169,10 @@ cd frontend && npm run build          # 프론트 타입체크 + 빌드
   실서버 브라우저 검증 9/9. 수집 전으로 앞당김 — 사용자 결정. **보류**: P2(G-M4))
 - 🔄 **DP**: 배포 (Vercel+Railway+Drive 주 저장소, 설계 docs/13) —
   **DP-M1**(Postgres, `8c72fce`) · **DP-M2**(인증, `6b54251`) ·
-  **DP-M3**(Drive 주 저장소+캐시, `a18936b`) 완료. 다음: DP-M4(Railway+Vercel 실배포)
+  **DP-M3**(Drive 주 저장소+캐시, `a18936b`) · **DP-M4**(실배포) 완료 2026-07-15:
+  백엔드 https://backend-production-27e5f.up.railway.app · 프론트
+  https://audio-platform-eta.vercel.app — 공개 URL 골든 패스 E2E·§8 실측 통과.
+  잔여: 연구실원 1명 접속 확인(사용자) → DP-M5(운영 런북·문서 마무리)
 - **최신 마일스톤 커밋**: `1dcd6c9` (G-M3)
 - 남은 V2 자리: GitHub(Dataset 버전), AI Assistant, Auth.
 
