@@ -78,13 +78,19 @@ def _export_filename(project_name: str) -> str:
     return f"{safe}_metadata.csv" if safe else "metadata.csv"
 
 
-def _content_disposition(filename: str) -> str:
-    """HTTP 헤더는 latin-1만 허용되므로 한글 파일명은 RFC 5987(filename*)로 싣는다."""
+def _content_disposition(filename: str, *, inline: bool = False) -> str:
+    """HTTP 헤더는 latin-1만 허용되므로 한글 파일명은 RFC 5987(filename*)로 싣는다.
+
+    원시 파일명을 헤더에 그대로 넣으면 Response 생성 자체가 UnicodeEncodeError로
+    죽는다(실사고: 한글 세그먼트 파일명 재생 500, 2026-07-15). 모든 파일 응답은
+    반드시 이 헬퍼를 거친다.
+    """
+    disposition = "inline" if inline else "attachment"
     ascii_fallback = (
-        filename.encode("ascii", "ignore").decode().lstrip("_") or "metadata.csv"
+        filename.encode("ascii", "ignore").decode().lstrip("_") or "file"
     )
     return (
-        f'attachment; filename="{ascii_fallback}"; '
+        f'{disposition}; filename="{ascii_fallback}"; '
         f"filename*=UTF-8''{quote(filename)}"
     )
 
@@ -121,7 +127,7 @@ def get_segment_audio(
         content=content,
         media_type=_AUDIO_MEDIA_TYPES.get(segment.format, "application/octet-stream"),
         headers={
-            "Content-Disposition": f'inline; filename="{segment.filename}"',
+            "Content-Disposition": _content_disposition(segment.filename, inline=True),
             # 세그먼트 파일은 생성 후 불변이라 캐시해도 안전하다.
             "Cache-Control": "private, max-age=3600",
         },

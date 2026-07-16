@@ -46,3 +46,42 @@ def test_audio_streams_wav_inline(
 def test_audio_missing_segment_404(client: TestClient) -> None:
     r = client.get("/api/segments/99999/audio")
     assert r.status_code == 404
+
+
+def test_audio_korean_filename_no_500(
+    client: TestClient, make_wav: Callable[..., Path]
+) -> None:
+    """한글 파일명 세그먼트 재생 회귀 테스트 (실사고: 배포에서 500, 2026-07-15).
+
+    HTTP 헤더는 latin-1만 허용 — 원시 한글 파일명을 Content-Disposition에 넣으면
+    Response 생성이 UnicodeEncodeError로 죽는다. RFC 5987(filename*)로 실려야 한다.
+    """
+    from urllib.parse import quote
+
+    payload = {
+        "name": "한글파일명",
+        "domain": None,
+        "cutting_mode": "fixed_interval",
+        "cutting_params": {"interval_sec": 1.0},
+        "naming_pattern": "{date}_{distance}_{seq:03d}",  # 한글 라벨이 파일명에 들어감
+        "label_schema": [
+            {"key": "distance", "type": "enum", "options": ["근거리", "원거리"], "required": True}
+        ],
+    }
+    pid = client.post("/api/projects", json=payload).json()["id"]
+    wav = make_wav(duration_sec=2.0, name="rec.wav")
+    ds_id = upload_file(client, pid, wav, "rec.wav")["dataset_id"]
+    r = client.post(
+        f"/api/datasets/{ds_id}/process",
+        json={"common_labels": {"distance": "근거리"}},
+    )
+    assert r.status_code == 202, r.text
+    seg = client.get(f"/api/datasets/{ds_id}/segments").json()["items"][0]
+    assert "근거리" in seg["filename"]  # 전제: 한글 파일명
+
+    r = client.get(f"/api/segments/{seg['id']}/audio")
+    assert r.status_code == 200, r.text  # 사고 당시: 500 UnicodeEncodeError
+    assert r.content[:4] == b"RIFF"
+    disposition = r.headers["content-disposition"]
+    assert disposition.startswith("inline")
+    assert f"filename*=UTF-8''{quote(seg['filename'])}" in disposition
