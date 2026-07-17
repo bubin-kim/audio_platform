@@ -33,6 +33,7 @@ export function ProjectForm() {
     interval_sec: "3",
   });
   const [targetDurationSec, setTargetDurationSec] = useState("");
+  const [expectedSegments, setExpectedSegments] = useState("");
   const [labelSchema, setLabelSchema] = useState<LabelFieldSchema[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +70,9 @@ export function ProjectForm() {
             : f,
         ),
         target_duration_sec: targetDurationSec ? Number(targetDurationSec) : null,
+        expected_segments_per_source: expectedSegments
+          ? Number(expectedSegments)
+          : null,
       });
       router.push(`/projects/${project.id}`);
       router.refresh();
@@ -168,6 +172,18 @@ export function ProjectForm() {
           min={1}
           value={targetDurationSec}
           onChange={(e) => setTargetDurationSec(e.target.value)}
+          className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-xs text-content-subtle">
+          원본 1개당 기대 조각 수(선택 — 다르면 재녹음 경고)
+        </label>
+        <input
+          type="number"
+          min={1}
+          value={expectedSegments}
+          onChange={(e) => setExpectedSegments(e.target.value)}
           className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
         />
       </div>

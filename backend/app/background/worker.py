@@ -21,7 +21,11 @@ from app.audio.metadata import extract_metadata
 from app.audio.naming import render_filename, render_path
 from app.core.config import get_settings
 from app.core.database import SessionLocal
-from app.hooks.events import on_dataset_exported, on_processing_done
+from app.hooks.events import (
+    on_dataset_exported,
+    on_processing_done,
+    on_processing_failed,
+)
 from app.models.job import Job
 from app.models.segment import Segment
 from app.repositories.dataset_repo import DatasetRepository
@@ -97,6 +101,10 @@ def run_cutting_job(job_id: int) -> None:
             job.error_msg = str(exc)
             job.finished_at = datetime.now(timezone.utc)
             db.commit()
+            # 실패 알림 훅 (V2-6, docs/14) — 현장에서 실패를 빨리 알아야 한다
+            on_processing_failed.emit(
+                dataset_id=job.dataset_id, job_id=job.id, error_msg=job.error_msg
+            )
     finally:
         db.close()
 
@@ -147,6 +155,9 @@ def _run(
     job.params = {**job.params, "seq_start": seq}  # 재현성 (JSON 변경 감지 위해 재할당)
     db.commit()
 
+    # 품질 검사(docs/14): 원본별 조각 수 집계 → 기대치와 비교
+    per_source_counts: dict[int, dict] = {}
+
     with tempfile.TemporaryDirectory(prefix="cutting_job_") as tmp_dir:
         tmp_path = Path(tmp_dir)
         for source_id in source_file_ids:
@@ -155,6 +166,7 @@ def _run(
                 continue
             local_source_path = storage.local_path(source.storage_path)
             snapshot = snapshots.get(source_id, [])
+            per_source_counts[source_id] = {"filename": source.filename, "actual": 0}
 
             for seg_audio in strategy.cut(local_source_path, cutting_params):
                 values = {**base_values, "seq": seq}
@@ -199,8 +211,39 @@ def _run(
                     )
                 )
                 job.progress += 1
+                per_source_counts[source_id]["actual"] += 1
                 db.commit()  # 진행률을 폴링에서 즉시 볼 수 있도록 매 세그먼트 커밋
                 seq += 1
+
+    # 품질 검사 결과를 Job에 기록 (기대치 미설정이면 생략 — docs/14)
+    expected = params.get("expected_segments_per_source")
+    if expected:
+        sources_report = []
+        for sid, info in per_source_counts.items():
+            actual = info["actual"]
+            status = (
+                "ok" if actual == expected
+                else "shortfall" if actual < expected
+                else "excess"
+            )
+            sources_report.append(
+                {
+                    "source_file_id": sid,
+                    "filename": info["filename"],
+                    "expected": expected,
+                    "actual": actual,
+                    "status": status,
+                }
+            )
+        job.params = {
+            **job.params,
+            "quality_check": {
+                "expected": expected,
+                "sources": sources_report,
+                "ok": all(s["status"] == "ok" for s in sources_report),
+            },
+        }
+        db.commit()
 
 
 def _match_inherited_labels(

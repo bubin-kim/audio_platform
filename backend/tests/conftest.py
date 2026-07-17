@@ -21,6 +21,7 @@ from app.core.database import Base
 from app.hooks.events import (
     on_dataset_exported,
     on_processing_done,
+    on_processing_failed,
     on_project_created,
     on_upload_complete,
 )
@@ -32,6 +33,7 @@ _ALL_HOOKS = (
     on_project_created,
     on_upload_complete,
     on_processing_done,
+    on_processing_failed,
     on_dataset_exported,
 )
 

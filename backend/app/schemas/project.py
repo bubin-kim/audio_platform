@@ -52,6 +52,7 @@ class ProjectCreate(BaseModel):
     naming_pattern: str = Field(min_length=1)
     label_schema: list[LabelFieldSchemaIn] = Field(default_factory=list)
     target_duration_sec: float | None = Field(default=None, gt=0)
+    expected_segments_per_source: int | None = Field(default=None, ge=1)
 
 
 class ProjectUpdate(BaseModel):
@@ -64,6 +65,7 @@ class ProjectUpdate(BaseModel):
     naming_pattern: str | None = Field(default=None, min_length=1)
     label_schema: list[LabelFieldSchemaIn] | None = None
     target_duration_sec: float | None = Field(default=None, gt=0)
+    expected_segments_per_source: int | None = Field(default=None, ge=1)
 
 
 class ProjectRead(BaseModel):
@@ -77,4 +79,5 @@ class ProjectRead(BaseModel):
     naming_pattern: str
     label_schema: list[LabelFieldSchema]
     target_duration_sec: float | None
+    expected_segments_per_source: int | None
     created_at: datetime

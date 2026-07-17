@@ -6,7 +6,7 @@
 
 from typing import Any
 
-from sqlalchemy import JSON, Float, String
+from sqlalchemy import JSON, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -37,6 +37,11 @@ class Project(Base, TimestampMixin):
 
     # 대시보드 "업로드 진행률" 분모(목표 총 녹음시간, 초). 없으면 진행률 미표시.
     target_duration_sec: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # 원본 1개당 기대 조각 수 (품질 검사, docs/14). 없으면 검사 안 함.
+    expected_segments_per_source: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
 
     datasets: Mapped[list["Dataset"]] = relationship(  # noqa: F821
         back_populates="project", cascade="all, delete-orphan"

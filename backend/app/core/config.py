@@ -87,6 +87,17 @@ class Settings(BaseSettings):
     # exports/ 밖으로 바꾸면 Drive 미러(DRIVE_MIRROR_PREFIXES) 대상에서 벗어남에 주의.
     export_path_pattern: str = "exports/{project}/{date}_{dataset}.csv"
 
+    # --- ntfy 푸시 알림 (V2-6, docs/14 §3) ---
+    # NTFY_TOPIC만 있으면 활성화. 없으면 구독자 미등록 = 기존과 동일(P4).
+    ntfy_topic: str = ""
+    ntfy_server: str = "https://ntfy.sh"
+    ntfy_timeout_sec: float = 5.0
+
+    @property
+    def ntfy_enabled(self) -> bool:
+        """ntfy 알림 구독자를 등록할지 여부."""
+        return bool(self.ntfy_topic)
+
     @property
     def drive_enabled(self) -> bool:
         """Drive 미러를 켤지 여부 (OAuth 3종 + 루트 폴더 ID 모두 필요)."""

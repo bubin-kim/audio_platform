@@ -82,6 +82,8 @@ class ProcessingService:
             # 재현성: 이 실행의 재처리 정책을 기록 (docs/10 §2.3)
             "replace_existing": req.replace_existing,
             "inherit_labels": req.inherit_labels,
+            # 품질 검사 기대값 (docs/14) — worker가 원본별 조각 수와 비교
+            "expected_segments_per_source": project.expected_segments_per_source,
         }
         job = Job(
             dataset_id=dataset_id,

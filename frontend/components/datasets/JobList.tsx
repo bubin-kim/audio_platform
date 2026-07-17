@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/Badge";
 import { formatDateTime } from "@/lib/format";
 import type { Job } from "@/lib/types";
+import { qualityCheckOf } from "@/components/datasets/QualityWarning";
 
 export function JobList({ jobs }: { jobs: Job[] }) {
   if (jobs.length === 0) {
@@ -27,6 +28,11 @@ export function JobList({ jobs }: { jobs: Job[] }) {
             <td className="py-2 text-content-muted">
               {j.progress}
               {j.total_items !== null && ` / ${j.total_items}`}
+              {qualityCheckOf(j)?.ok === false && (
+                <span className="ml-1 text-status-warn" title="조각 수가 기대와 다름 — 재녹음 검토">
+                  ⚠️
+                </span>
+              )}
             </td>
             <td className="py-2 text-content-subtle">
               {j.started_at ? formatDateTime(j.started_at) : "—"}

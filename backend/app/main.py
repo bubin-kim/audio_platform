@@ -73,3 +73,7 @@ app.include_router(stats.router, prefix=settings.api_prefix)
 from app.hooks.notion import register_notion_subscribers  # noqa: E402
 
 register_notion_subscribers()
+
+from app.hooks.ntfy import register_ntfy_subscribers  # noqa: E402
+
+register_ntfy_subscribers()

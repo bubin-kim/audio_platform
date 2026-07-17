@@ -107,6 +107,8 @@ Segment.labels = {"patient_id": "P01", "valve": "mitral"}   # 심음
 | cutting_params | JSON | 전략별 파라미터 (interval, threshold 등) |
 | naming_pattern | str | 예: `{date}_{model}_{distance}_{seq:03d}` |
 | label_schema | JSON | 이 프로젝트가 요구하는 라벨 정의(2장) |
+| target_duration_sec | int, null | 목표 총 녹음시간(초) — 대시보드 업로드 진행률 분모 |
+| expected_segments_per_source | int, null | 원본 1개당 기대 조각 수 — 커팅 후 품질 검사(docs/14), null이면 검사 생략 |
 | created_at | datetime | |
 
 > `domain`은 **태그**다. 코드가 `if domain=="vehicle"` 하지 않는다(CLAUDE.md P1). 필터·표시에만 쓴다.

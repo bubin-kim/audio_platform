@@ -35,6 +35,7 @@ export interface Project {
   naming_pattern: string;
   label_schema: LabelFieldSchema[];
   target_duration_sec: number | null;
+  expected_segments_per_source: number | null;
   created_at: string;
 }
 
@@ -46,6 +47,7 @@ export interface ProjectCreate {
   naming_pattern: string;
   label_schema: LabelFieldSchema[];
   target_duration_sec?: number | null;
+  expected_segments_per_source?: number | null;
 }
 
 // --- Dataset ---
@@ -116,6 +118,19 @@ export interface UploadResult {
 
 export type JobType = "cutting" | "export";
 export type JobStatus = "queued" | "running" | "done" | "failed";
+
+/** 커팅 품질 검사 결과 (docs/14) — Job.params.quality_check */
+export interface QualityCheck {
+  expected: number;
+  ok: boolean;
+  sources: {
+    source_file_id: number;
+    filename: string;
+    expected: number;
+    actual: number;
+    status: "ok" | "shortfall" | "excess";
+  }[];
+}
 
 export interface Job {
   id: number;

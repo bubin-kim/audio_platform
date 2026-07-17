@@ -39,4 +39,5 @@ class Hook:
 on_project_created = Hook("on_project_created")  # V2-1 신설 (docs/07 §2)
 on_upload_complete = Hook("on_upload_complete")
 on_processing_done = Hook("on_processing_done")
+on_processing_failed = Hook("on_processing_failed")  # V2-6 신설 (docs/14)
 on_dataset_exported = Hook("on_dataset_exported")

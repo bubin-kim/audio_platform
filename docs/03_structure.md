@@ -86,6 +86,7 @@ backend/
 │   ├── hooks/               # ── [확장 지점] 이벤트 훅 + V2 구독자 ────────
 │   │   ├── events.py           #   on_project_created / on_upload_complete ...
 │   │   ├── notion.py           #   ★ V2-1 Notion 구독자 (docs/07, 토큰 없으면 no-op)
+│   │   ├── ntfy.py             #   ★ V2-6 ntfy 푸시 구독자 (docs/14, 토픽 없으면 no-op)
 │   │   └── README.md          #   "V2에서 Notion/Drive를 여기에 구독시킨다"
 │   │
 │   ├── models/             # ── DB 테이블 정의 (SQLAlchemy ORM) ───────

@@ -114,6 +114,9 @@
   silence_based는 전부 선택: `silence_threshold_db`(기본 -40) · `min_silence_sec`(0.3) ·
   `min_segment_sec`(0.2) · `max_segment_sec`(없음) · `padding_sec`(0.1).
 - `target_duration_sec`(nullable): 대시보드 "업로드 진행률" 분모(05 §4).
+- `expected_segments_per_source`(nullable, ≥1): 원본 1개당 기대 조각 수(docs/14).
+  설정 시 커팅 완료 후 원본별 실제 조각 수와 비교해 `Job.params.quality_check`에 기록
+  (차단 없음 — 경고만). null이면 검사 생략.
 - `domain`: **태그일 뿐**. 서버는 이 값으로 분기하지 않는다(P1).
 
 **응답 201 `ProjectRead`**
@@ -291,6 +294,14 @@ Dataset의 SourceFile들을 Project 설정의 `cutting_mode`로 커팅한다. **
 - `progress`/`total_items`: 진행바(예: 320/1000). `total_items`는 시작 후 확정될 수 있어 초기 null 가능.
 - `result_path`: export Job 완료 시 CSV 논리 경로.
 - `error_msg`: 실패 사유(status=failed).
+- `params.quality_check`: 커팅 Job에서 프로젝트에 `expected_segments_per_source`가
+  설정된 경우에만 존재(docs/14 §4). 형식:
+  ```json
+  { "expected": 30, "ok": false,
+    "sources": [ { "source_file_id": 5, "filename": "rec.wav",
+                   "expected": 30, "actual": 29, "status": "shortfall" } ] }
+  ```
+  `status`: `"ok" | "shortfall" | "excess"`. 프론트는 `ok=false`면 재녹음 검토 경고를 띄운다.
 
 ### 7.2 GET `/api/datasets/{id}/jobs`
 **응답 200 `Page[JobRead]`** — 최신순.

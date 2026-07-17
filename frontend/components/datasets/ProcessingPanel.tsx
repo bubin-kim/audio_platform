@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { LabelValuesForm } from "@/components/datasets/LabelValuesForm";
 import { Badge } from "@/components/ui/Badge";
+import { QualityWarning } from "@/components/datasets/QualityWarning";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { ApiRequestError, startProcessing } from "@/lib/api";
@@ -111,6 +112,7 @@ export function ProcessingPanel({
               }
             />
           </div>
+          <QualityWarning job={job} />
           {job.error_msg && (
             <p className="mt-2 text-sm text-status-error">{job.error_msg}</p>
           )}
