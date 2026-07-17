@@ -58,6 +58,7 @@
 | 11_csv_export.md | V2-5 CSV export(경로 패턴·출처 컬럼·반올림) 설계 | export 형식 변경 전 |
 | 12_gap_analysis.md | 갭 감사·개선 설계 (P0~P2, 보류 항목 포함) | 개선 작업 재개 시 |
 | 13_deployment.md | DP 배포 설계 (Vercel+Railway+Drive 주 저장소·인증) | 배포 작업 시 |
+| 14_notification.md | V2-6 ntfy 푸시 + 커팅 품질 검사(기대 조각 수) 설계 | 알림·품질 검사 변경 전 |
 
 큰 기능은 이 패턴을 따른다: **설계 문서(docs/NN)를 먼저 쓰고 사용자 승인 → 문서대로 구현**
 (06→MVP, 07→V2-1, 09→V2-3, 10→V2-4, 11→V2-5 전부 이렇게 진행됨).
@@ -173,7 +174,12 @@ cd frontend && npm run build          # 프론트 타입체크 + 빌드
   백엔드 https://backend-production-27e5f.up.railway.app · 프론트
   https://audio-platform-eta.vercel.app — 공개 URL 골든 패스 E2E·§8 실측 통과.
   잔여: 연구실원 1명 접속 확인(사용자) → DP-M5(운영 런북·문서 마무리)
-- **최신 마일스톤 커밋**: `1dcd6c9` (G-M3)
+- ✅ **V2-6**: 커팅 품질 검사(기대 조각 수) + ntfy 푸시 알림 완료 (설계 docs/14) — `b2250f5`
+  교수님 요청 기능: expected_segments_per_source 설정 시 원본별 조각 수 검사 →
+  부족/초과면 UI 경고 + high 우선순위 푸시("재녹음 검토"). 알림 3종(완료·품질경고·실패)
+  실서버 발행 + 사용자 휴대폰 수신 확인 2026-07-17. 토픽은 Railway `NTFY_TOPIC` env.
+  잔여(N-M3): 연구실원 온보딩 절차를 DP-M5 운영 런북에 포함.
+- **최신 마일스톤 커밋**: `b2250f5` (V2-6)
 - 남은 V2 자리: GitHub(Dataset 버전), AI Assistant, Auth.
 
 ## 12. 하지 말 것 (Don'ts)
