@@ -19,10 +19,15 @@ import httpx
 
 from app.core.config import Settings, get_settings
 from app.core.database import SessionLocal  # 모듈 심볼 (테스트 몽키패치용, worker와 동일)
-from app.hooks.events import on_processing_done, on_project_created
+from app.hooks.events import (
+    on_processing_done,
+    on_project_created,
+    on_upload_complete,
+)
 from app.models.project import Project
 from app.repositories.dataset_repo import DatasetRepository
 from app.repositories.job_repo import JobRepository
+from app.repositories.source_file_repo import SourceFileRepository
 from app.repositories.project_repo import ProjectRepository
 from app.repositories.segment_repo import SegmentRepository
 
@@ -354,6 +359,61 @@ def _log_processing_done(dataset_id: int, job_id: int) -> None:
         db.close()
 
 
+def _handle_upload_complete(
+    project_id: int, dataset_id: int, source_ids: list[int]
+) -> None:
+    _spawn(
+        _log_upload_complete,
+        project_id=project_id,
+        dataset_id=dataset_id,
+        source_ids=source_ids,
+    )
+
+
+def _log_upload_complete(
+    project_id: int, dataset_id: int, source_ids: list[int]
+) -> None:
+    """업로드 → 자동기록 섹션에 파일·연구원 한 줄 append (docs/15 §5)."""
+    db = SessionLocal()
+    try:
+        dataset = DatasetRepository(db).get(dataset_id)
+        if dataset is None:
+            logger.warning("notion: Dataset %s 없음 — 업로드 기록 생략", dataset_id)
+            return
+        wanted = set(source_ids)
+        sources = [
+            sf
+            for sf in SourceFileRepository(db).list_by_dataset(dataset_id)
+            if sf.id in wanted
+        ]
+        if not sources:
+            return
+
+        names = ", ".join(s.filename for s in sources)
+        total_mb = sum(s.file_size or 0 for s in sources) / (1024 * 1024)
+        uploader = sources[0].uploaded_by or "미기재"
+
+        client = _make_client()
+        page_id = client.find_page_by_platform_id(project_id)
+        if page_id is None:
+            page_id = client.create_project_page(dataset.project)
+        container_id = client.find_log_container(page_id)
+        if container_id is None:
+            container_id = client.create_sections(page_id)
+
+        now = datetime.now(timezone.utc)
+        text = (
+            f"{now.strftime('%Y-%m-%d %H:%M')} UTC — 업로드: {names} "
+            f"({total_mb:.1f}MB, dataset: {dataset.name}) — 연구원: {uploader}"
+        )
+        client.append_summary_block(container_id, text)
+        logger.info("notion: 업로드 기록 (dataset_id=%s, %d개)", dataset_id, len(sources))
+    except Exception:  # noqa: BLE001
+        logger.exception("notion: 업로드 기록 실패 (dataset_id=%s)", dataset_id)
+    finally:
+        db.close()
+
+
 # --- [4] 등록 ---------------------------------------------------------------
 
 
@@ -368,5 +428,8 @@ def register_notion_subscribers(settings: Settings | None = None) -> bool:
         return False
     on_project_created.subscribe(_handle_project_created)
     on_processing_done.subscribe(_handle_processing_done)
-    logger.info("notion: 구독자 등록 완료 (project_created, processing_done)")
+    on_upload_complete.subscribe(_handle_upload_complete)
+    logger.info(
+        "notion: 구독자 등록 완료 (project_created, processing_done, upload_complete)"
+    )
     return True

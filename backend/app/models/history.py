@@ -20,6 +20,8 @@ class UploadHistory(Base, TimestampMixin):
     )
     filename: Mapped[str] = mapped_column(String(300), nullable=False)
     file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 원본이 삭제돼도 "누가 올렸었나"는 이력에 남는다 (docs/15).
+    uploaded_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     project: Mapped["Project"] = relationship(  # noqa: F821
         back_populates="upload_histories"

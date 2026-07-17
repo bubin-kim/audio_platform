@@ -27,6 +27,9 @@ async def upload_files(
     files: list[UploadFile] = File(..., description="하나 이상의 오디오 파일"),
     project_id: int = Form(..., description="대상 프로젝트"),
     dataset_id: int | None = Form(None, description="대상 데이터셋(없으면 v1 자동생성)"),
+    uploaded_by: str | None = Form(
+        None, max_length=100, description="업로드한 연구원 이름(선택, 자기 신고)"
+    ),
     db: Session = Depends(get_db),
     storage: StorageBackend = Depends(get_storage_dep),
 ) -> UploadResult:
@@ -43,7 +46,10 @@ async def upload_files(
             "파일을 나눠 올리거나 관리자에게 MAX_UPLOAD_MB 조정을 요청하세요."
         )
     ds_id, created, sources = UploadService(db, storage).register_uploads(
-        project_id=project_id, files=uploaded, dataset_id=dataset_id
+        project_id=project_id,
+        files=uploaded,
+        dataset_id=dataset_id,
+        uploaded_by=uploaded_by,
     )
     return UploadResult(
         dataset_id=ds_id,

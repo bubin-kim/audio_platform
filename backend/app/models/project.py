@@ -43,6 +43,9 @@ class Project(Base, TimestampMixin):
         Integer, nullable=True
     )
 
+    # 전체 수집 목표(세그먼트 개수, docs/15). 대시보드 "수집 진행률" 게이지 분모.
+    target_segment_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     datasets: Mapped[list["Dataset"]] = relationship(  # noqa: F821
         back_populates="project", cascade="all, delete-orphan"
     )

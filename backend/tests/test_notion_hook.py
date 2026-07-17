@@ -15,7 +15,11 @@ from sqlalchemy.orm import Session
 
 import app.hooks.notion as notion_module
 from app.core.config import Settings
-from app.hooks.events import on_processing_done, on_project_created
+from app.hooks.events import (
+    on_processing_done,
+    on_project_created,
+    on_upload_complete,
+)
 from app.hooks.notion import NotionClient, register_notion_subscribers
 from app.models.project import Project
 from app.repositories.project_repo import ProjectRepository
@@ -162,6 +166,7 @@ def test_register_subscribes_when_configured() -> None:
     assert ok is True
     assert len(on_project_created._subscribers) == 1
     assert len(on_processing_done._subscribers) == 1
+    assert len(on_upload_complete._subscribers) == 1
 
 
 # --- 구독자 E2E (TestClient + 구독 등록, 동기 _spawn, 가짜 클라이언트) ---
@@ -220,16 +225,17 @@ def test_processing_done_appends_summary_into_container(
     wav = make_wav(duration_sec=3.0, name="rec.wav")
     ds_id = upload_file(client, pid, wav, "rec.wav")["dataset_id"]
 
-    # 페이지 존재 + 섹션 있는 페이지 시나리오
+    # 페이지 존재 + 섹션 있는 페이지 시나리오. 업로드도 기록을 남기게 되어(V2-7)
+    # 여기서는 커팅 로그만 보기 위해 그때까지의 트래픽을 지운다.
+    notion_env.requests.clear()
     notion_env.query_results = [{"id": "page-abc"}]
     notion_env.page_children = [_container_block("container-1")]
     r = client.post(f"/api/datasets/{ds_id}/process")
     assert r.status_code == 202
 
     paths = [(req.method, req.url.path) for req in notion_env.requests]
-    # [프로젝트 생성 페이지] → [query] → [GET children: 컨테이너 탐색] → [컨테이너에 append]
+    # [query] → [GET children: 컨테이너 탐색] → [컨테이너에 append]
     assert paths == [
-        ("POST", "/v1/pages"),
         ("POST", f"/v1/databases/{DB_ID}/query"),
         ("GET", "/v1/blocks/page-abc/children"),
         ("PATCH", "/v1/blocks/container-1/children"),  # ★ 페이지가 아닌 컨테이너
@@ -333,3 +339,45 @@ def test_notion_failure_does_not_break_main_flow(
     )
     r = client.post("/api/projects", json=_project_payload())
     assert r.status_code == 201  # 본 흐름은 멀쩡
+
+
+def test_upload_records_uploader_into_container(
+    client: TestClient, notion_env: _Recorder, make_wav: Callable[..., Path]
+) -> None:
+    """업로드 → 자동기록 섹션에 파일명·연구원 이름 한 줄 (V2-7, docs/15 §5)."""
+    pid = client.post("/api/projects", json=_project_payload()).json()["id"]
+    notion_env.requests.clear()  # 프로젝트 생성 기록 제거
+    notion_env.query_results = [{"id": "page-abc"}]
+    notion_env.page_children = [_container_block("container-1")]
+
+    wav = make_wav(duration_sec=1.0, name="rec.wav")
+    with wav.open("rb") as f:
+        r = client.post(
+            "/api/uploads",
+            data={"project_id": pid, "uploaded_by": "김연구"},
+            files={"files": ("rec.wav", f, "audio/wav")},
+        )
+    assert r.status_code == 201
+
+    assert notion_env.requests[-1].url.path == "/v1/blocks/container-1/children"
+    bullet = _body(notion_env.requests[-1])["children"][0]["bulleted_list_item"]
+    text = bullet["rich_text"][0]["text"]["content"]
+    assert "업로드: rec.wav" in text
+    assert "연구원: 김연구" in text
+
+
+def test_upload_without_name_records_unspecified(
+    client: TestClient, notion_env: _Recorder, make_wav: Callable[..., Path]
+) -> None:
+    """이름 미기재 업로드는 '미기재'로 남는다."""
+    pid = client.post("/api/projects", json=_project_payload()).json()["id"]
+    notion_env.requests.clear()
+    notion_env.query_results = [{"id": "page-abc"}]
+    notion_env.page_children = [_container_block("container-1")]
+
+    wav = make_wav(duration_sec=1.0, name="rec2.wav")
+    upload_file(client, pid, wav, "rec2.wav")
+    text = _body(notion_env.requests[-1])["children"][0]["bulleted_list_item"][
+        "rich_text"
+    ][0]["text"]["content"]
+    assert "연구원: 미기재" in text

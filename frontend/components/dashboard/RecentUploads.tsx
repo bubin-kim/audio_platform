@@ -15,7 +15,14 @@ export function RecentUploads({ uploads }: { uploads: RecentUpload[] }) {
               key={`${u.filename}-${i}`}
               className="flex items-center justify-between py-2 text-sm"
             >
-              <span className="text-content">{u.filename}</span>
+              <span className="text-content">
+                {u.filename}
+                {u.uploaded_by && (
+                  <span className="ml-2 text-xs text-content-subtle">
+                    {u.uploaded_by}
+                  </span>
+                )}
+              </span>
               <span className="text-content-subtle">
                 {formatDateTime(u.uploaded_at)}
                 {u.file_size !== null && ` · ${formatBytes(u.file_size)}`}

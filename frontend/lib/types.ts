@@ -36,6 +36,7 @@ export interface Project {
   label_schema: LabelFieldSchema[];
   target_duration_sec: number | null;
   expected_segments_per_source: number | null;
+  target_segment_count: number | null;
   created_at: string;
 }
 
@@ -48,6 +49,7 @@ export interface ProjectCreate {
   label_schema: LabelFieldSchema[];
   target_duration_sec?: number | null;
   expected_segments_per_source?: number | null;
+  target_segment_count?: number | null;
 }
 
 // --- Dataset ---
@@ -106,6 +108,7 @@ export interface SourceRead {
   bit_depth: number | null;
   file_size: number | null;
   format: string | null;
+  uploaded_by: string | null;
 }
 
 export interface UploadResult {
@@ -174,6 +177,14 @@ export interface RecentUpload {
   filename: string;
   uploaded_at: string;
   file_size: number | null;
+  uploaded_by: string | null;
+}
+
+/** 수집 진행률(세그먼트 개수 기준, docs/15). target 없으면 ratio는 null. */
+export interface CollectionProgress {
+  collected: number;
+  target: number | null;
+  ratio: number | null;
 }
 
 export interface ProjectStats {
@@ -191,6 +202,7 @@ export interface StatsResponse {
   sample_rate_distribution: Record<string, number>;
   format_distribution: Record<string, number>;
   upload_progress: UploadProgress;
+  collection_progress: CollectionProgress;
   labeling_progress: LabelingProgress;
   recent_uploads: RecentUpload[];
   per_project: ProjectStats[] | null;

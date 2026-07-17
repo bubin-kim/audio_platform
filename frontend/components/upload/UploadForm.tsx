@@ -17,6 +17,7 @@ export function UploadForm({ projects }: { projects: Project[] }) {
   const [isDragging, setIsDragging] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadedBy, setUploadedBy] = useState("");
   const [result, setResult] = useState<UploadResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -31,6 +32,11 @@ export function UploadForm({ projects }: { projects: Project[] }) {
     setDatasetId("");
   }, [projectId]);
 
+  // 연구원 이름은 브라우저가 기억한다 (자기 신고 방식, docs/15)
+  useEffect(() => {
+    setUploadedBy(localStorage.getItem("uploader_name") ?? "");
+  }, []);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (projectId === "" || files.length === 0) return;
@@ -38,10 +44,13 @@ export function UploadForm({ projects }: { projects: Project[] }) {
     setError(null);
     setResult(null);
     try {
+      const name = uploadedBy.trim();
+      localStorage.setItem("uploader_name", name);
       const res = await uploadFiles(
         projectId,
         files,
         datasetId === "" ? undefined : datasetId,
+        name || undefined,
       );
       setResult(res);
       setFiles([]);
@@ -124,6 +133,18 @@ export function UploadForm({ projects }: { projects: Project[] }) {
       </div>
       <div>
         <label className="text-xs text-content-subtle">
+          연구원 이름 (선택 — 누가 올렸는지 기록, 한 번 적으면 기억됨)
+        </label>
+        <input
+          value={uploadedBy}
+          onChange={(e) => setUploadedBy(e.target.value)}
+          maxLength={100}
+          placeholder="예: 김연구"
+          className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-xs text-content-subtle">
           오디오 파일 (wav/mp3/flac/m4a, 다중 선택 가능)
         </label>
         <div
@@ -197,6 +218,7 @@ export function UploadForm({ projects }: { projects: Project[] }) {
               <li key={s.id}>
                 {s.filename} — {s.format}, {s.sample_rate}Hz,{" "}
                 {s.duration_sec?.toFixed(1)}초
+                {s.uploaded_by && ` · ${s.uploaded_by}`}
               </li>
             ))}
           </ul>

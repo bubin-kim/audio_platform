@@ -17,6 +17,7 @@ class SourceRead(BaseModel):
     bit_depth: int | None
     file_size: int | None
     format: str | None
+    uploaded_by: str | None
 
 
 class UploadResult(BaseModel):

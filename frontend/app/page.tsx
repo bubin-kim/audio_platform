@@ -37,7 +37,13 @@ export default async function DashboardPage() {
           />
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div
+          className={`mt-4 grid grid-cols-1 gap-4 ${
+            stats.collection_progress.target !== null
+              ? "md:grid-cols-3"
+              : "md:grid-cols-2"
+          }`}
+        >
           <ProgressStat
             title="업로드 진행률"
             current={formatDuration(stats.upload_progress.current_sec)}
@@ -48,6 +54,15 @@ export default async function DashboardPage() {
             }
             ratio={stats.upload_progress.ratio}
           />
+          {stats.collection_progress.target !== null && (
+            <ProgressStat
+              title="수집 진행률"
+              current={`${stats.collection_progress.collected.toLocaleString()}개`}
+              target={`${stats.collection_progress.target.toLocaleString()}개`}
+              ratio={stats.collection_progress.ratio}
+              variant="gauge"
+            />
+          )}
           <ProgressStat
             title="라벨링 진행률"
             current={`${stats.labeling_progress.labeled} / ${stats.labeling_progress.total}`}

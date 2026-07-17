@@ -46,6 +46,7 @@ class UploadService:
         project_id: int,
         files: list[UploadedFile],
         dataset_id: int | None = None,
+        uploaded_by: str | None = None,
     ) -> tuple[int, bool, list[SourceFile]]:
         """원본들을 저장·등록한다. (dataset_id, created_dataset, sources) 반환."""
         if self.project_repo.get(project_id) is None:
@@ -55,9 +56,12 @@ class UploadService:
 
         dataset, created = self._resolve_dataset(project_id, dataset_id)
 
+        # 이름은 자기 신고 — 공백만 있으면 미기재로 취급 (docs/15)
+        uploader = uploaded_by.strip() if uploaded_by and uploaded_by.strip() else None
+
         sources: list[SourceFile] = []
         for uf in files:
-            sources.append(self._register_one(project_id, dataset.id, uf))
+            sources.append(self._register_one(project_id, dataset.id, uf, uploader))
 
         self.db.commit()
         for s in sources:
@@ -85,7 +89,11 @@ class UploadService:
         return self.dataset_service.get_or_create_default(project_id)
 
     def _register_one(
-        self, project_id: int, dataset_id: int, uf: UploadedFile
+        self,
+        project_id: int,
+        dataset_id: int,
+        uf: UploadedFile,
+        uploaded_by: str | None = None,
     ) -> SourceFile:
         fmt = Path(uf.filename).suffix.lstrip(".").lower()
         if fmt not in ALLOWED_FORMATS:
@@ -122,6 +130,7 @@ class UploadService:
             bit_depth=meta.bit_depth,
             file_size=meta.file_size,
             format=meta.format,
+            uploaded_by=uploaded_by,
         )
         self.source_repo.add(source)
         self.history_repo.add(
@@ -129,6 +138,7 @@ class UploadService:
                 project_id=project_id,
                 filename=safe_name,
                 file_size=meta.file_size,
+                uploaded_by=uploaded_by,
             )
         )
         return source

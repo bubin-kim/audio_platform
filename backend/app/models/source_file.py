@@ -28,6 +28,8 @@ class SourceFile(Base, TimestampMixin):
     bit_depth: Mapped[int | None] = mapped_column(Integer, nullable=True)
     file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     format: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # 업로드한 연구원 이름(자기 신고, docs/15). 로그인 없는 공용 토큰 체제라 강제하지 않는다.
+    uploaded_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     dataset: Mapped["Dataset"] = relationship(  # noqa: F821
         back_populates="source_files"

@@ -34,6 +34,7 @@ export function ProjectForm() {
   });
   const [targetDurationSec, setTargetDurationSec] = useState("");
   const [expectedSegments, setExpectedSegments] = useState("");
+  const [targetSegmentCount, setTargetSegmentCount] = useState("");
   const [labelSchema, setLabelSchema] = useState<LabelFieldSchema[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +73,9 @@ export function ProjectForm() {
         target_duration_sec: targetDurationSec ? Number(targetDurationSec) : null,
         expected_segments_per_source: expectedSegments
           ? Number(expectedSegments)
+          : null,
+        target_segment_count: targetSegmentCount
+          ? Number(targetSegmentCount)
           : null,
       });
       router.push(`/projects/${project.id}`);
@@ -184,6 +188,18 @@ export function ProjectForm() {
           min={1}
           value={expectedSegments}
           onChange={(e) => setExpectedSegments(e.target.value)}
+          className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-xs text-content-subtle">
+          전체 수집 목표(세그먼트 개수, 선택 — 대시보드 수집 진행률 게이지)
+        </label>
+        <input
+          type="number"
+          min={1}
+          value={targetSegmentCount}
+          onChange={(e) => setTargetSegmentCount(e.target.value)}
           className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
         />
       </div>

@@ -109,6 +109,7 @@ Segment.labels = {"patient_id": "P01", "valve": "mitral"}   # 심음
 | label_schema | JSON | 이 프로젝트가 요구하는 라벨 정의(2장) |
 | target_duration_sec | int, null | 목표 총 녹음시간(초) — 대시보드 업로드 진행률 분모 |
 | expected_segments_per_source | int, null | 원본 1개당 기대 조각 수 — 커팅 후 품질 검사(docs/14), null이면 검사 생략 |
+| target_segment_count | int, null | 전체 수집 목표(세그먼트 개수) — 대시보드 수집 진행률 게이지(docs/15) |
 | created_at | datetime | |
 
 > `domain`은 **태그**다. 코드가 `if domain=="vehicle"` 하지 않는다(CLAUDE.md P1). 필터·표시에만 쓴다.
@@ -150,6 +151,7 @@ Segment.labels = {"patient_id": "P01", "valve": "mitral"}   # 심음
 | filename | str | 원본 파일명 |
 | storage_path | str | |
 | duration_sec | float | 원본 총 길이 |
+| uploaded_by | str, null | 업로드한 연구원 이름(자기 신고, docs/15) |
 | uploaded_at | datetime | |
 
 ### 3.5 Job (비동기 작업 = 재현성 + 진행률)
@@ -173,6 +175,7 @@ Segment.labels = {"patient_id": "P01", "valve": "mitral"}   # 심음
 | project_id | FK→Project | |
 | filename | str | |
 | file_size | int | |
+| uploaded_by | str, null | 원본이 삭제돼도 남는 업로더 기록(docs/15) |
 | uploaded_at | datetime | |
 
 > ProcessingHistory는 별도 테이블 대신 **Job**이 그 역할을 겸한다(중복 방지).

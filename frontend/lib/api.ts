@@ -188,10 +188,12 @@ export const uploadFiles = (
   projectId: number,
   files: File[],
   datasetId?: number,
+  uploadedBy?: string,
 ): Promise<UploadResult> => {
   const form = new FormData();
   form.set("project_id", String(projectId));
   if (datasetId !== undefined) form.set("dataset_id", String(datasetId));
+  if (uploadedBy) form.set("uploaded_by", uploadedBy);
   for (const f of files) form.append("files", f);
   return request<UploadResult>("/uploads", { method: "POST", body: form });
 };

@@ -20,6 +20,7 @@ from app.repositories.history_repo import UploadHistoryRepository
 from app.repositories.project_repo import ProjectRepository
 from app.repositories.segment_repo import SegmentRepository
 from app.schemas.stats import (
+    CollectionProgress,
     LabelingProgress,
     ProjectStats,
     RecentUpload,
@@ -58,11 +59,15 @@ class StatsService:
 
         per_project: list[ProjectStats] | None = None
         if project_id is not None:
-            target_sec = self.project_repo.get(project_id).target_duration_sec
+            project = self.project_repo.get(project_id)
+            target_sec = project.target_duration_sec
+            target_count = project.target_segment_count
         else:
             projects = self.project_repo.list_all()
             targets = [p.target_duration_sec for p in projects if p.target_duration_sec]
             target_sec = sum(targets) if targets else None
+            counts = [p.target_segment_count for p in projects if p.target_segment_count]
+            target_count = sum(counts) if counts else None
             per_project = self._per_project(df, projects)
 
         return StatsResponse(
@@ -77,6 +82,11 @@ class StatsService:
                 target_sec=target_sec,
                 ratio=(total_duration_sec / target_sec) if target_sec else None,
             ),
+            collection_progress=CollectionProgress(
+                collected=total_segments,
+                target=target_count,
+                ratio=(total_segments / target_count) if target_count else None,
+            ),
             labeling_progress=LabelingProgress(
                 labeled=labeled,
                 total=total_segments,
@@ -87,6 +97,7 @@ class StatsService:
                     filename=h.filename,
                     uploaded_at=h.created_at,
                     file_size=h.file_size,
+                    uploaded_by=h.uploaded_by,
                 )
                 for h in self.history_repo.recent(limit=10, project_id=project_id)
             ],

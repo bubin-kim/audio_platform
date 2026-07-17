@@ -21,6 +21,15 @@ class RecentUpload(BaseModel):
     filename: str
     uploaded_at: datetime
     file_size: int | None
+    uploaded_by: str | None = None
+
+
+class CollectionProgress(BaseModel):
+    """수집 진행률(세그먼트 개수 기준, docs/15). target 없으면 ratio는 null."""
+
+    collected: int
+    target: int | None
+    ratio: float | None
 
 
 class ProjectStats(BaseModel):
@@ -38,6 +47,7 @@ class StatsResponse(BaseModel):
     sample_rate_distribution: dict[str, int]
     format_distribution: dict[str, int]
     upload_progress: UploadProgress
+    collection_progress: CollectionProgress
     labeling_progress: LabelingProgress
     recent_uploads: list[RecentUpload]
     # project_id로 범위를 좁힌 조회에서는 None(전체 조회일 때만 채운다, 06_API.md §9).

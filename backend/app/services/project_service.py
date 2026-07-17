@@ -33,6 +33,7 @@ class ProjectService:
             label_schema=[f.model_dump() for f in data.label_schema],
             target_duration_sec=data.target_duration_sec,
             expected_segments_per_source=data.expected_segments_per_source,
+            target_segment_count=data.target_segment_count,
         )
         self.repo.add(project)
         self.db.commit()

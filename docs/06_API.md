@@ -117,6 +117,11 @@
 - `expected_segments_per_source`(nullable, ≥1): 원본 1개당 기대 조각 수(docs/14).
   설정 시 커팅 완료 후 원본별 실제 조각 수와 비교해 `Job.params.quality_check`에 기록
   (차단 없음 — 경고만). null이면 검사 생략.
+- `target_segment_count`(nullable, ≥1): 전체 수집 목표(세그먼트 개수, docs/15).
+  대시보드 "수집 진행률" 원형 게이지 분모. null이면 게이지 미표시.
+  ※ 숫자 목표 3형제 구분: `target_duration_sec`=시간 목표(업로드 진행률),
+  `target_segment_count`=개수 목표(수집 진행률), `expected_segments_per_source`=
+  원본당 품질 검사(재녹음 경고).
 - `domain`: **태그일 뿐**. 서버는 이 값으로 분기하지 않는다(P1).
 
 **응답 201 `ProjectRead`**
@@ -196,6 +201,7 @@ Dataset의 모든 Segment를 CSV로 생성. 큰 데이터셋 대비 **Job으로 
 | `files` | file[] | ✓ | 하나 이상의 오디오 파일(wav/mp3/flac/m4a) |
 | `project_id` | int | ✓ | 대상 프로젝트 |
 | `dataset_id` | int | ✗ | 대상 데이터셋. **없으면 기본 Dataset(v1) 자동 생성**(승인된 결정 4) |
+| `uploaded_by` | str(≤100) | ✗ | 업로드한 연구원 이름(자기 신고, docs/15). 공백뿐이면 null 처리 |
 
 **동작**: 각 파일을 Storage에 저장 → `audio/metadata.py`로 메타 추출 → **SourceFile** + **UploadHistory** 기록 → `on_upload_complete` 훅 발화.
 
@@ -207,7 +213,8 @@ Dataset의 모든 Segment를 CSV로 생성. 큰 데이터셋 대비 **Job으로 
   "sources": [
     { "id": 5, "filename": "rec_4h.wav", "storage_path": "uploads/2/rec_4h.wav",
       "duration_sec": 14400.0, "sample_rate": 44100, "channels": 2,
-      "bit_depth": 16, "file_size": 5079600000, "format": "wav" }
+      "bit_depth": 16, "file_size": 5079600000, "format": "wav",
+      "uploaded_by": "김연구" }
   ]
 }
 ```
@@ -337,9 +344,11 @@ Dataset의 SourceFile들을 Project 설정의 `cutting_mode`로 커팅한다. **
   "sample_rate_distribution": { "44100": 800, "48000": 200 },
   "format_distribution": { "wav": 1000 },
   "upload_progress": { "current_sec": 3000.0, "target_sec": 36000, "ratio": 0.083 },
+  "collection_progress": { "collected": 1000, "target": 11520, "ratio": 0.087 },
   "labeling_progress": { "labeled": 640, "total": 1000, "ratio": 0.64 },
   "recent_uploads": [
-    { "filename": "rec_4h.wav", "uploaded_at": "...", "file_size": 5079600000 }
+    { "filename": "rec_4h.wav", "uploaded_at": "...", "file_size": 5079600000,
+      "uploaded_by": "김연구" }
   ],
   "per_project": [
     { "project_id": 1, "name": "지하주차장 비프음", "segment_count": 1000, "duration_sec": 3000.0 }
@@ -347,6 +356,9 @@ Dataset의 SourceFile들을 Project 설정의 `cutting_mode`로 커팅한다. **
 }
 ```
 - `upload_progress.target_sec`가 없으면(Project.target_duration_sec null) `ratio`는 null.
+- `collection_progress`(docs/15): 세그먼트 개수 기준 수집 진행률. `target`은 프로젝트
+  조회 시 그 프로젝트의 `target_segment_count`, 전체 조회 시 설정된 프로젝트들의 합.
+  target 없으면 `ratio` null(게이지 미표시).
 - `per_project`는 전체 조회 시에만 채운다.
 
 ---
