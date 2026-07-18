@@ -31,12 +31,16 @@
 - **P4. 외부 연동은 플러그인이다.** Notion·Drive 등 외부 서비스는 `hooks/` 구독자 또는
   Storage 구현체로만 붙는다. **토큰/설정이 없으면 등록되지 않을 뿐, 코어는 100% 동일하게
   동작해야 한다.** 구독자 실패는 로그만 남기고 본 흐름을 절대 깨지 않는다.
-  (실증: `hooks/notion.py`, `storage/drive.py` — 이 패턴을 그대로 따른다.)
+  (실증 3건: `hooks/notion.py` · `hooks/ntfy.py` · `storage/drive.py` — 이 패턴을 그대로 따른다.
+  구독자 구현 형태도 동일: 데몬 스레드 `_spawn` + 자체 `SessionLocal()` + 타임아웃 +
+  `register_*_subscribers()`가 설정 없으면 no-op.)
 
 ## 3. 기술 스택 (고정 — 임의 변경 금지)
 
 - Backend: **Python 3.12+ / FastAPI**, 패키지 관리 **uv** (`uv run ...`으로 실행)
-- ORM/DB: **SQLAlchemy + Alembic**, DB는 **SQLite** (PostgreSQL 전환은 DB URL만 교체)
+- ORM/DB: **SQLAlchemy + Alembic**. DB는 **로컬 개발=SQLite, 배포(Railway)=PostgreSQL**
+  (DP-M1에서 전환 완료). 코드는 양쪽 공통 기능만 쓰고 `DATABASE_URL`로만 구분한다 —
+  방언 특화 기능(JSONB 연산자 등) 금지.
 - Audio: **librosa · pydub · soundfile · ffmpeg · numpy · pandas**
 - Frontend: **Next.js(App Router) + React + Tailwind**, 패키지 관리 **npm**
 - 비동기 작업: **FastAPI BackgroundTasks** (Celery/Redis 도입은 사용자 승인 필요)
@@ -76,8 +80,9 @@
 | DB 접근 | `backend/app/repositories/` |
 | DB 테이블(ORM) | `backend/app/models/` |
 | API 입출력 형태(Pydantic) | `backend/app/schemas/` |
-| 저장소 구현 | `backend/app/storage/` (예: `local.py`·`drive.py`·`mirror.py`) |
-| 외부 서비스 구독자 | `backend/app/hooks/` (예: `notion.py` — 토큰 없으면 no-op) |
+| 저장소 구현 | `backend/app/storage/` (`local.py`·`drive.py`·`mirror.py`·`cached_drive.py` — 선택은 `build_storage()`가 `STORAGE_MODE`로) |
+| 외부 서비스 구독자 | `backend/app/hooks/` (예: `notion.py`·`ntfy.py` — 설정 없으면 no-op) |
+| **Project 설정 필드 추가** (목표치·검사값 등) | 7단계 전부: ① `models/project.py` ② `uv run alembic revision --autogenerate` + `upgrade head` ③ `schemas/project.py` **Create·Update·Read 3곳** ④ `project_service.create()`에 전달 (빠뜨리기 쉬움) ⑤ `frontend/lib/types.ts` ⑥ `ProjectForm.tsx` 입력 ⑦ docs/05·06 갱신 |
 | 백엔드 운영 스크립트 | `backend/scripts/` (예: `setup_drive_auth.py`) |
 | 프론트 백엔드 호출 | `frontend/lib/api.ts` — **컴포넌트가 직접 fetch 금지**, `request()` 헬퍼 사용 |
 | 프론트 UI 조각 | `frontend/components/<영역>/` (ui·layout·dashboard·projects·datasets·upload) |
@@ -94,11 +99,21 @@
 - 모든 라우터는 **자동 문서(Swagger)에 뜨도록** summary/response_model 지정.
 - 하드코딩 경로 금지. 경로·설정은 `core/config.py`(.env)에서 읽는다.
 - 오디오 파일 접근은 **항상 Storage 인터페이스 경유** (직접 `open()` 금지).
+- HTTP 응답 헤더에 한글(파일명 등)을 넣을 때는 RFC 5987(`filename*=UTF-8''...`) —
+  원시 한글은 latin-1 인코딩 실패로 500이 난다 (실사고: `de96756`).
+- **테스트 관습**: ① 새 훅을 `hooks/events.py`에 신설하면 **`tests/conftest.py`의
+  `_ALL_HOOKS`에도 등록** (안 하면 훅 격리 픽스처가 안 비워 기존 테스트가 오염된다).
+  ② 외부 API 클라이언트는 `transport` 주입 파라미터를 두고 `httpx.MockTransport`로
+  테스트한다. ③ 구독자 테스트는 `_spawn`을 동기 실행으로, `SessionLocal`을 테스트
+  세션으로 몽키패치 (기존 `test_notion_hook.py`·`test_quality_ntfy.py` 패턴 복사).
 
 ## 7. 데이터 모델 핵심 (상세는 docs/05)
 
 3층: **Project → Dataset → Segment**.
 - Project: 도메인 설정(cutting_mode, cutting_params, naming_pattern, label_schema)을 가진다.
+  숫자 목표 3형제를 혼동하지 말 것 — `target_duration_sec`(시간 목표→업로드 진행률) ·
+  `target_segment_count`(개수 목표→수집 진행률 게이지) · `expected_segments_per_source`
+  (원본당 기대 조각 수→커팅 품질 검사·재녹음 경고). 비교표는 docs/06 §3.1.
 - Dataset: Project 내부의 버전 있는 묶음.
 - Segment: 커팅된 조각 1개 = 메타데이터 1행. 자동메타 + 라벨.
 - History(Upload/Processing)와 Job으로 **재현성**을 남긴다.
@@ -118,6 +133,30 @@ cd frontend && npm run build          # 프론트 타입체크 + 빌드
 - **브라우저 검증**: `.claude/skills/run-audio-platform/` 스킬 사용.
   `node driver.mjs smoke`가 골든 패스(프로젝트 생성→업로드→커팅→export→대시보드)를
   격리 환경에서 자동 검증하고 스크린샷을 남긴다. 세부 명령은 그 SKILL.md 참조.
+- `uv run` 시 `VIRTUAL_ENV=/opt/miniconda3` 경고는 무시해도 된다(콘다 잔재, 동작 무관).
+- **프로젝트 스킬 3종**: 커팅 결과가 이상하면 `audio-diagnose`(실측→threshold 추천),
+  마일스톤 마무리는 `finish-milestone`(DoD 체크→§11 갱신→커밋 루틴), 앱 구동·화면
+  확인은 `run-audio-platform`. 같은 일을 손으로 재발명하지 말 것.
+
+### 8b. 배포·운영 (DP-M4 이후 — 상세 설계는 docs/13)
+
+- 실서버: 백엔드 **Railway**(https://backend-production-27e5f.up.railway.app, 시작
+  커맨드가 `alembic upgrade head`를 자동 실행 — 마이그레이션은 배포만 하면 적용됨),
+  프론트 **Vercel**(https://audio-platform-eta.vercel.app).
+- 배포 명령: 백엔드는 저장소 루트에서 `railway up --detach` (업로드 컨텍스트=루트,
+  `RAILWAY_DOCKERFILE_PATH=backend/Dockerfile`), 프론트는 `cd frontend && vercel deploy --prod`.
+  배포 후 `railway logs`에서 마이그레이션 적용 줄을 확인한다.
+- env 변경은 **CLI로**: `railway variables --set "KEY=값"` (`--skip-deploys` 없이면
+  자동 재배포). 대시보드의 Generate 버튼은 **임의 보안값을 넣으므로** 직접 타이핑할 것.
+- **비밀값(ACCESS_TOKEN·NOTION_API_KEY·NTFY_TOPIC·GOOGLE_OAUTH_*)은 Railway env가
+  유일한 보관처** — 코드·문서·커밋에 절대 넣지 않는다. 값 확인은
+  `railway variables --kv`(출력 공유 시 마스킹).
+- 저장소 모드: 로컬 개발 `STORAGE_MODE=local`(+Drive 미러는 exports만),
+  배포 `drive_primary`(Drive가 진실 원천 + 로컬 캐시 — 설정 없으면 기동 거부).
+- **실서버 검증 관례**: 검증용 임시 리소스는 이름에 `(삭제예정)`을 붙여 만들고,
+  끝나면 반드시 DELETE + Notion에 생긴 페이지도 아카이브한다. 실데이터 프로젝트를
+  검증에 쓰지 않는다. curl로 한글 쿼리 파라미터를 보낼 땐 `-G --data-urlencode`
+  (미인코딩 한글은 h11이 400으로 거부).
 
 ## 9. 작업 방식 (Claude Code 행동 규칙)
 
@@ -129,8 +168,14 @@ cd frontend && npm run build          # 프론트 타입체크 + 빌드
 - UI를 바꿨으면 **실제 브라우저로 확인**(스크린샷)한 뒤에 완료라고 보고한다.
   SSR 응답 확인만으로 "된다"고 하지 않는다.
 - 기존 규칙을 어기게 되는 상황이면, 코드를 짜기 전에 그 사실을 먼저 알린다.
+- **체크포인트 경계**: 승인된 마일스톤 안에서는 구현+로컬 검증(테스트·빌드·브라우저)까지
+  연속 진행해도 된다. 단 **실배포·실서버 데이터 변경·외부 서비스에 닿는 단계 직전에는
+  멈추고 결과를 보고한 뒤 확인받는다** (사용자가 배포까지 묶어 승인한 경우 예외).
 - **커밋 메시지 형식 (하드 룰)**: 한국어로 쓴다. 마일스톤 커밋은
   `V2-3(D-M1~M4): 요약` 형식의 접두사를 붙인다. 커밋은 저장소 **루트에서** 실행한다.
+- **§11 갱신은 별도 docs 커밋으로**: 마일스톤 커밋을 먼저 하고, 그 해시를
+  `docs: CLAUDE.md §11 갱신 — … (해시)` 커밋으로 기록한다. 마일스톤 커밋 안에 §11을
+  넣으면 자기 해시를 미리 알 수 없어 기록이 어긋난다 (확립된 관례, finish-milestone 스킬 참조).
 - 프론트 자동 테스트 프레임워크는 **도입하지 않기로 결정**(사용자 확정).
   프론트 검증은 `npm run build` + 실제 브라우저 확인이 공식 방식이다.
 
@@ -143,7 +188,9 @@ cd frontend && npm run build          # 프론트 타입체크 + 빌드
 3. UI 변경이면 **브라우저에서 실제 동작 확인** (§8 스킬, 스크린샷).
 4. API·데이터 모델 계약이 바뀌었으면 **docs/06(및 해당 설계 문서) 갱신**.
 5. 새 함정·비직관적 동작을 발견했으면 해당 문서(스킬 Gotchas 등)에 기록.
-6. 마일스톤 완료 커밋이면 **§11을 그 시점 상태로 갱신**.
+6. 마일스톤 완료 커밋이면 **§11을 그 시점 상태로 갱신** (별도 docs 커밋 — §9).
+7. **실배포가 포함된 마일스톤이면**: 실서버에서 시나리오를 직접 돌려 검증하고
+   (명령 출력·수치 증거 첨부), 검증용 임시 데이터를 삭제한 뒤에 완료라고 보고한다.
 
 ## 11. 현재 진행 상황
 
@@ -191,7 +238,10 @@ cd frontend && npm run build          # 프론트 타입체크 + 빌드
 - 도메인 분기문(`if 차량음`) 넣기.
 - `audio/`에서 FastAPI·SQLAlchemy import 하기.
 - Service에서 SQL 직접 쓰기(반드시 Repository 경유).
-- 로그인/인증·Celery·클라우드 배포 코드 넣기 (아직 승인된 마일스톤 아님).
+- Celery/Redis 등 새 인프라를 승인 없이 도입하기 (비동기는 BackgroundTasks 유지).
+- 계정형 로그인/사용자 테이블 만들기 — 현행 인증은 **공용 ACCESS_TOKEN 1개**(docs/13 §6)가
+  전부이고, 계정형 Auth는 남은 V2 자리로 **별도 승인 필요**. 업로더 이름은 자기 신고(docs/15).
+- 비밀값(토큰·API 키·토픽명)을 코드·문서·커밋에 넣기 (보관처는 Railway env — §8b).
 - 커팅을 HTTP 요청 안에서 동기 실행하기(반드시 백그라운드 Job).
 - 외부 연동 실패가 업로드·커팅·export 본 흐름을 깨게 만들기 (P4).
 - 승인 없이 스택·주요 구조 바꾸기.
