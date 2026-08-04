@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { getSegmentWaveform } from "@/lib/api";
+import { useLazyVisible } from "@/lib/useLazyVisible";
 
 /**
  * 세그먼트 미니 파형 — 재생 없이 커팅 결과를 눈으로 비교하는 용도.
@@ -20,8 +21,10 @@ export function SegmentWaveform({
 }) {
   const [peaks, setPeaks] = useState<number[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const [ref, visible] = useLazyVisible<HTMLDivElement>();
 
   useEffect(() => {
+    if (!visible) return;
     let cancelled = false;
     getSegmentWaveform(segmentId)
       .then((w) => !cancelled && setPeaks(w.peaks))
@@ -29,8 +32,11 @@ export function SegmentWaveform({
     return () => {
       cancelled = true;
     };
-  }, [segmentId]);
+  }, [segmentId, visible]);
 
+  if (!visible) {
+    return <div ref={ref} style={{ width, height }} aria-hidden />;
+  }
   if (failed) {
     return <span className="text-xs text-content-subtle">파형 없음</span>;
   }

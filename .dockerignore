@@ -1,0 +1,19 @@
+# railway up의 업로드 컨텍스트는 저장소 루트다(backend/Dockerfile이 COPY backend/ .만
+# 쓰더라도, docker build context 전체가 먼저 업로드된다). 여기 없는 무거운 디렉터리는
+# 전부 실려서 업로드가 느려지거나 타임아웃 난다 (실사고 2026-08-04: node_modules 477MB
+# + .venv 등 합계 956MB로 반복 timeout — 원인은 이거였지 Railway 장애가 아니었다).
+frontend/node_modules/
+frontend/.next/
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.pytest_cache/
+backend/audio_platform.db
+data/
+.git/
+.claude/skills/*/screenshots/
+*.wav
+*.WAV
+*.mp3
+*.m4a
+*.flac

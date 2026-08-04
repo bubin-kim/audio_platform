@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { getSegmentSpectrogram, getSourceSpectrogram } from "@/lib/api";
 import type { Spectrogram as SpectrogramData } from "@/lib/types";
+import { useLazyVisible } from "@/lib/useLazyVisible";
 import config from "@/tailwind.config";
 
 /**
@@ -51,10 +52,12 @@ export function Spectrogram({
   height?: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [wrapRef, visible] = useLazyVisible<HTMLDivElement>();
   const [spec, setSpec] = useState<SpectrogramData | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    if (!visible) return;
     let cancelled = false;
     const fetcher =
       kind === "segment" ? getSegmentSpectrogram : getSourceSpectrogram;
@@ -64,7 +67,7 @@ export function Spectrogram({
     return () => {
       cancelled = true;
     };
-  }, [kind, id]);
+  }, [kind, id, visible]);
 
   useEffect(() => {
     if (!spec || !canvasRef.current || spec.cols === 0) return;
@@ -91,6 +94,9 @@ export function Spectrogram({
     ctx.putImageData(img, 0, 0);
   }, [spec]);
 
+  if (!visible) {
+    return <div ref={wrapRef} style={{ width, height }} aria-hidden />;
+  }
   if (failed) {
     return <span className="text-xs text-content-subtle">스펙트럼 없음</span>;
   }
