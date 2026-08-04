@@ -76,8 +76,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       : { "Content-Type": "application/json", ...auth, ...(init?.headers ?? {}) },
   });
   if (!res.ok) {
-    if (res.status === 401 && typeof window !== "undefined") {
-      window.location.href = "/login";
+    if (res.status === 401) {
+      // 만료/변경된 토큰 — /logout이 쿠키를 지운 뒤 로그인으로 보낸다.
+      // SSR에서도 반드시 처리해야 한다: 던지기만 하면 페이지가 500(Application
+      // error)이 되고, 쿠키가 남아 있어 로그인 화면으로 돌아갈 수도 없다.
+      if (typeof window === "undefined") {
+        const { redirect } = await import("next/navigation");
+        redirect("/logout"); // NEXT_REDIRECT throw — 아래 코드는 실행되지 않음
+      }
+      window.location.href = "/logout";
     }
     const detail = await res.json().catch(() => ({ detail: res.statusText }));
     throw new ApiRequestError(
