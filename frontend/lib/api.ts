@@ -16,6 +16,7 @@ import type {
   Segment,
   SourceRead,
   Spectrogram,
+  SpectrogramMode,
   StatsResponse,
   UploadResult,
   Waveform,
@@ -193,15 +194,22 @@ export const getSegmentWaveform = (segmentId: number) =>
   request<Waveform>(`/segments/${segmentId}/waveform`, { cache: "force-cache" });
 
 /** 멜 스펙트로그램 (docs/16). 파일 불변 → 파형과 같이 브라우저 캐시 허용. */
-export const getSegmentSpectrogram = (segmentId: number) =>
-  request<Spectrogram>(`/segments/${segmentId}/spectrogram`, {
+export const getSegmentSpectrogram = (
+  segmentId: number,
+  mode: SpectrogramMode = "absolute",
+) =>
+  request<Spectrogram>(`/segments/${segmentId}/spectrogram${qs({ mode })}`, {
     cache: "force-cache",
   });
 
-export const getSourceSpectrogram = (sourceFileId: number) =>
-  request<Spectrogram>(`/source-files/${sourceFileId}/spectrogram`, {
-    cache: "force-cache",
-  });
+export const getSourceSpectrogram = (
+  sourceFileId: number,
+  mode: SpectrogramMode = "absolute",
+) =>
+  request<Spectrogram>(
+    `/source-files/${sourceFileId}/spectrogram${qs({ mode })}`,
+    { cache: "force-cache" },
+  );
 
 export const listDatasetSources = (datasetId: number) =>
   request<Page<SourceRead>>(`/datasets/${datasetId}/sources`);

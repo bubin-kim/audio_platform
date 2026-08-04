@@ -115,7 +115,7 @@ export function SegmentTable({
               <tr className="text-left text-content-subtle">
                 <th className="pb-2 pr-2 font-normal">재생</th>
                 <th className="pb-2 pr-4 font-normal">파형</th>
-                <th className="pb-2 pr-4 font-normal">스펙트럼</th>
+                <th className="pb-2 pr-4 font-normal">스펙트로그램</th>
                 <th className="pb-2 pr-4 font-normal">파일명</th>
                 <th className="pb-2 pr-4 font-normal">길이</th>
                 <th className="pb-2 pr-4 font-normal">Sample Rate</th>

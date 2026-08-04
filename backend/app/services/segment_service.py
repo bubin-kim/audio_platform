@@ -38,11 +38,18 @@ class SegmentService:
         return segment, peaks
 
     def spectrogram(
-        self, segment_id: int, storage: StorageBackend, *, max_cols: int = 240
+        self,
+        segment_id: int,
+        storage: StorageBackend,
+        *,
+        max_cols: int = 240,
+        mode: str = "absolute",
     ) -> SpectrogramData:
         """세그먼트 멜 스펙트로그램 (docs/16). 계산은 audio/에 위임."""
         segment = self.get(segment_id)
-        return mel_spectrogram(storage.local_path(segment.storage_path), max_cols=max_cols)
+        return mel_spectrogram(
+            storage.local_path(segment.storage_path), max_cols=max_cols, mode=mode
+        )
 
     def delete(self, segment_id: int, storage: StorageBackend) -> None:
         """세그먼트 1개 삭제 — 파일 + row (docs/12 B1)."""

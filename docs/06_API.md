@@ -195,8 +195,8 @@ Dataset의 모든 Segment를 CSV로 생성. 큰 데이터셋 대비 **Job으로 
 
 | 엔드포인트 | 설명 |
 |---|---|
-| `GET /api/segments/{id}/spectrogram` | 세그먼트 멜 스펙트로그램 (열 상한 240) |
-| `GET /api/source-files/{id}/spectrogram` | 원본 통 음원 멜 스펙트로그램 (열 상한 800) |
+| `GET /api/segments/{id}/spectrogram?mode=` | 세그먼트 멜 스펙트로그램 (열 상한 240) |
+| `GET /api/source-files/{id}/spectrogram?mode=` | 원본 통 음원 멜 스펙트로그램 (열 상한 800) |
 | `GET /api/datasets/{id}/sources` | 원본 파일 목록 `Page[SourceRead]` (uploaded_by 포함) |
 
 **응답 200 `SpectrogramRead`**
@@ -205,8 +205,14 @@ Dataset의 모든 Segment를 CSV로 생성. 큰 데이터셋 대비 **Job으로 
   "fmax": 24000, "db_floor": -80.0, "db_ceil": 0.0, "data": "<base64>" }
 ```
 - `data`: uint8(0~100) `n_mels×cols` 행렬의 base64 (row-major, 행 0=최저음).
-  dB는 풀스케일 기준 절대값(db_floor~db_ceil) 양자화 — **파일별 정규화 없음**
-  (waveform과 같은 이유: 파일 간 밝기 비교 가능).
+  `db_floor`~`db_ceil`이 이 파일의 실제 표시 범위 — 고정 -80~0을 쓰면 분포가 좁은
+  녹음에서 대비가 죽어 묻힌 이벤트가 안 보인다(실측: 260804_005는 -52.5~13.8).
+- **`mode`**(쿼리, 기본 `absolute`):
+  - `absolute` — 절대 dB. 소리의 실제 크기를 본다.
+  - `contrast` — 주파수별 배경(중앙값)을 뺀 상대 dB. **환경음에 묻힌 이벤트 탐색용**.
+    실측(260804_005): 경적 순간에도 저주파 환경음이 11~13dB 더 커서 absolute로는
+    안 보이지만, contrast에서는 대비가 +13 → +33으로 올라 검출 경적 16개 중
+    14개가 육안으로 식별된다.
 - 주파수 축은 멜(로그) 스케일, fmax=sr/2 — 도메인 전용 설정 없음(P1).
 - 파일 불변 → `Cache-Control: private, max-age=3600`.
 

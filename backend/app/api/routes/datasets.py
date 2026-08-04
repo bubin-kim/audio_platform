@@ -166,10 +166,15 @@ def get_segment_waveform(
 def get_segment_spectrogram(
     segment_id: int,
     response: Response,
+    mode: str = Query(
+        "absolute",
+        pattern="^(absolute|contrast)$",
+        description="absolute=실제 소리 크기 / contrast=배경 제거(묻힌 이벤트 탐색)",
+    ),
     db: Session = Depends(get_db),
     storage: StorageBackend = Depends(get_storage_dep),
 ) -> SpectrogramRead:
-    spec = SegmentService(db).spectrogram(segment_id, storage)
+    spec = SegmentService(db).spectrogram(segment_id, storage, mode=mode)
     response.headers["Cache-Control"] = "private, max-age=3600"
     return SpectrogramRead(
         duration_sec=spec.duration_sec, sample_rate=spec.sample_rate,

@@ -96,6 +96,10 @@ export interface Waveform {
   peaks: number[];
 }
 
+/** 스펙트로그램 표시 모드 (docs/16).
+ * absolute=실제 소리 크기 / contrast=주파수별 배경 제거(환경음에 묻힌 이벤트 탐색). */
+export type SpectrogramMode = "absolute" | "contrast";
+
 /** 멜 스펙트로그램 (docs/16). data는 uint8(0~100) n_mels×cols base64, 행 0=최저음. */
 export interface Spectrogram {
   duration_sec: number;

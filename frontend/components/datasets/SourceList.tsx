@@ -6,7 +6,7 @@ import { Spectrogram } from "@/components/datasets/Spectrogram";
 import { Card } from "@/components/ui/Card";
 import { listDatasetSources } from "@/lib/api";
 import { formatDuration } from "@/lib/format";
-import type { SourceRead } from "@/lib/types";
+import type { SourceRead, SpectrogramMode } from "@/lib/types";
 
 /**
  * 원본 파일 섹션 (docs/16) — 파일명·업로더·길이 + 행 펼치면 통 음원 스펙트로그램.
@@ -74,6 +74,8 @@ function SourceRow({
   open: boolean;
   onToggle: () => void;
 }) {
+  const [mode, setMode] = useState<SpectrogramMode>("absolute");
+
   return (
     <>
       <tr>
@@ -97,7 +99,40 @@ function SourceRow({
       {open && (
         <tr>
           <td colSpan={5} className="pb-3">
-            <Spectrogram kind="source" id={source.id} width={760} height={140} />
+            <div className="mb-2 flex items-center gap-2 text-xs">
+              <span className="text-content-subtle">보기:</span>
+              {(
+                [
+                  ["absolute", "실제 크기"],
+                  ["contrast", "배경 제거 (묻힌 소리 찾기)"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setMode(value)}
+                  className={`rounded-full border px-2.5 py-1 transition-colors ${
+                    mode === value
+                      ? "border-accent bg-accent-soft text-accent"
+                      : "border-border bg-surface-card text-content-muted hover:bg-surface-muted"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <Spectrogram
+              kind="source"
+              id={source.id}
+              width={760}
+              height={140}
+              mode={mode}
+            />
+            <p className="mt-1 text-xs text-content-subtle">
+              세로=주파수(아래가 저음) · 가로=시간 · 밝을수록 큰 소리.
+              {mode === "contrast" &&
+                " 각 주파수의 평소 수준을 뺀 값이라, 환경음에 묻힌 소리도 밝게 드러납니다."}
+            </p>
           </td>
         </tr>
       )}

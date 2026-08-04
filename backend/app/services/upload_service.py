@@ -82,14 +82,14 @@ class UploadService:
         return self.source_repo.list_by_dataset(dataset_id)
 
     def source_spectrogram(
-        self, source_id: int, *, max_cols: int = 800
+        self, source_id: int, *, max_cols: int = 800, mode: str = "absolute"
     ) -> SpectrogramData:
         """원본 통 음원 멜 스펙트로그램 (docs/16). 계산은 audio/에 위임."""
         source = self.source_repo.get(source_id)
         if source is None:
             raise NotFoundError(f"SourceFile {source_id}를 찾을 수 없습니다.")
         return mel_spectrogram(
-            self.storage.local_path(source.storage_path), max_cols=max_cols
+            self.storage.local_path(source.storage_path), max_cols=max_cols, mode=mode
         )
 
     def _resolve_dataset(

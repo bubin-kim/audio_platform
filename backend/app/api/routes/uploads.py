@@ -3,7 +3,16 @@
 multipart/form-data. 파일을 읽어 Service에 넘기고, Service가 저장·메타추출·등록을 조립한다.
 """
 
-from fastapi import APIRouter, Depends, File, Form, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_storage_dep
@@ -96,10 +105,15 @@ def list_dataset_sources(
 def get_source_spectrogram(
     source_file_id: int,
     response: Response,
+    mode: str = Query(
+        "absolute",
+        pattern="^(absolute|contrast)$",
+        description="absolute=실제 소리 크기 / contrast=배경 제거(묻힌 이벤트 탐색)",
+    ),
     db: Session = Depends(get_db),
     storage: StorageBackend = Depends(get_storage_dep),
 ) -> SpectrogramRead:
-    spec = UploadService(db, storage).source_spectrogram(source_file_id)
+    spec = UploadService(db, storage).source_spectrogram(source_file_id, mode=mode)
     # 원본 파일은 불변 → 캐시 허용 (waveform과 동일 정책)
     response.headers["Cache-Control"] = "private, max-age=3600"
     return SpectrogramRead(

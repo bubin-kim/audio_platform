@@ -3,20 +3,26 @@
 import { useEffect, useRef, useState } from "react";
 
 import { getSegmentSpectrogram, getSourceSpectrogram } from "@/lib/api";
-import type { Spectrogram as SpectrogramData } from "@/lib/types";
+import type {
+  Spectrogram as SpectrogramData,
+  SpectrogramMode,
+} from "@/lib/types";
 import { useLazyVisible } from "@/lib/useLazyVisible";
 import config from "@/tailwind.config";
 
 /**
  * 멜 스펙트로그램 캔버스 (docs/16). 세로=주파수(멜, 아래=저음), 가로=시간.
- * 색은 순차 램프(단일 회청 hue, 밝음→어두움) — 값이 클수록 어둡다.
+ * 색은 viridis 램프 — 조용하면 어두운 보라, 소리가 강하면 밝은 노랑이라
+ * 환경음에 묻힌 이벤트도 밝은 점/줄무늬로 눈에 띈다.
  * dB는 절대 스케일(백엔드 양자화 그대로)이라 파일 간 밝기 비교가 가능하다.
  * 캔버스는 CSS 클래스를 못 쓰므로 tailwind 토큰(spectro)을 직접 import한다.
  */
 
 const SPECTRO = (config.theme?.extend?.colors as Record<string, unknown>)
   ?.spectro as Record<string, string>;
-const STOPS = [SPECTRO["0"], SPECTRO["1"], SPECTRO["2"], SPECTRO["3"]];
+const STOPS = Object.keys(SPECTRO)
+  .sort((a, b) => Number(a) - Number(b))
+  .map((k) => SPECTRO[k]);
 
 function hexToRgb(hex: string): [number, number, number] {
   const v = parseInt(hex.slice(1), 16);
@@ -45,11 +51,13 @@ export function Spectrogram({
   id,
   width = 120,
   height = 28,
+  mode = "absolute",
 }: {
   kind: "segment" | "source";
   id: number;
   width?: number;
   height?: number;
+  mode?: SpectrogramMode;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [wrapRef, visible] = useLazyVisible<HTMLDivElement>();
@@ -61,13 +69,15 @@ export function Spectrogram({
     let cancelled = false;
     const fetcher =
       kind === "segment" ? getSegmentSpectrogram : getSourceSpectrogram;
-    fetcher(id)
+    setSpec(null);
+    setFailed(false);
+    fetcher(id, mode)
       .then((s) => !cancelled && setSpec(s))
       .catch(() => !cancelled && setFailed(true));
     return () => {
       cancelled = true;
     };
-  }, [kind, id, visible]);
+  }, [kind, id, visible, mode]);
 
   useEffect(() => {
     if (!spec || !canvasRef.current || spec.cols === 0) return;
@@ -98,7 +108,7 @@ export function Spectrogram({
     return <div ref={wrapRef} style={{ width, height }} aria-hidden />;
   }
   if (failed) {
-    return <span className="text-xs text-content-subtle">스펙트럼 없음</span>;
+    return <span className="text-xs text-content-subtle">스펙트로그램 없음</span>;
   }
   if (spec === null) {
     return (
@@ -115,7 +125,7 @@ export function Spectrogram({
       ref={canvasRef}
       role="img"
       aria-label="멜 스펙트로그램 (아래=저음)"
-      title={`멜 스펙트로그램 · ${spec.duration_sec.toFixed(1)}초 · ~${Math.round(spec.fmax / 1000)}kHz(멜)`}
+      title={`멜 스펙트로그램 · ${spec.duration_sec.toFixed(1)}초 · ~${Math.round(spec.fmax / 1000)}kHz(멜) · ${spec.db_floor}~${spec.db_ceil}dB (밝을수록 큰 소리)`}
       className="rounded border border-border"
       style={{ width, height, imageRendering: "auto" }}
     />
