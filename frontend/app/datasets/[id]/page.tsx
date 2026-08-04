@@ -4,6 +4,7 @@ import { ExportPanel } from "@/components/datasets/ExportPanel";
 import { JobList } from "@/components/datasets/JobList";
 import { ProcessingPanel } from "@/components/datasets/ProcessingPanel";
 import { SegmentTable } from "@/components/datasets/SegmentTable";
+import { SourceList } from "@/components/datasets/SourceList";
 import { Header } from "@/components/layout/Header";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
@@ -57,6 +58,10 @@ export default async function DatasetDetailPage({
             </p>
             <ExportPanel datasetId={datasetId} />
           </Card>
+        </div>
+
+        <div className="mt-4">
+          <SourceList datasetId={dataset.id} />
         </div>
 
         <Card className="mt-4">

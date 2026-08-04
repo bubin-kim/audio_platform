@@ -3,12 +3,14 @@
 multipart/form-data. 파일을 읽어 Service에 넘기고, Service가 저장·메타추출·등록을 조립한다.
 """
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_storage_dep
 from app.core.config import get_settings
 from app.core.exceptions import PayloadTooLargeError
+from app.schemas.common import Page
+from app.schemas.segment import SpectrogramRead
 from app.schemas.upload import SourceRead, UploadResult
 from app.services.dataset_service import DatasetService
 from app.services.upload_service import UploadedFile, UploadService
@@ -69,3 +71,39 @@ def delete_source_file(
     storage: StorageBackend = Depends(get_storage_dep),
 ) -> None:
     DatasetService(db).delete_source_file(source_file_id, storage)
+
+
+@router.get(
+    "/datasets/{dataset_id}/sources",
+    response_model=Page[SourceRead],
+    summary="데이터셋의 원본 파일 목록 (docs/16 — 원본 섹션)",
+)
+def list_dataset_sources(
+    dataset_id: int,
+    db: Session = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage_dep),
+) -> Page[SourceRead]:
+    sources = UploadService(db, storage).list_sources(dataset_id)
+    items = [SourceRead.model_validate(s) for s in sources]
+    return Page(items=items, total=len(items))
+
+
+@router.get(
+    "/source-files/{source_file_id}/spectrogram",
+    response_model=SpectrogramRead,
+    summary="원본 통 음원 멜 스펙트로그램 (docs/16)",
+)
+def get_source_spectrogram(
+    source_file_id: int,
+    response: Response,
+    db: Session = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage_dep),
+) -> SpectrogramRead:
+    spec = UploadService(db, storage).source_spectrogram(source_file_id)
+    # 원본 파일은 불변 → 캐시 허용 (waveform과 동일 정책)
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    return SpectrogramRead(
+        duration_sec=spec.duration_sec, sample_rate=spec.sample_rate,
+        n_mels=spec.n_mels, cols=spec.cols, fmax=spec.fmax,
+        db_floor=spec.db_floor, db_ceil=spec.db_ceil, data=spec.data_b64,
+    )

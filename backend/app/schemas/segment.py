@@ -17,6 +17,23 @@ class WaveformRead(BaseModel):
     peaks: list[float]
 
 
+class SpectrogramRead(BaseModel):
+    """멜 스펙트로그램 데이터 (docs/16 — 원본·세그먼트 공용).
+
+    data는 uint8(0~100) n_mels×cols 행렬의 base64 (row-major, 행 0=최저음).
+    dB는 풀스케일 기준 절대값(db_floor~db_ceil) — 파일별 정규화 없음.
+    """
+
+    duration_sec: float
+    sample_rate: int
+    n_mels: int
+    cols: int
+    fmax: float
+    db_floor: float
+    db_ceil: float
+    data: str
+
+
 class LabelUpdate(BaseModel):
     """개별 세그먼트 라벨 수정 요청 (06_API.md §8 — 예외 보정용).
 

@@ -10,6 +10,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.audio.metadata import extract_metadata
+from app.audio.spectrogram import SpectrogramData, mel_spectrogram
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.hooks.events import on_upload_complete
 from app.models.source_file import SourceFile
@@ -74,6 +75,22 @@ class UploadService:
             source_ids=[s.id for s in sources],
         )
         return dataset.id, created, sources
+
+    def list_sources(self, dataset_id: int) -> list[SourceFile]:
+        """데이터셋의 원본 목록 (docs/16 — 원본 섹션). 없는 dataset이면 404."""
+        self.dataset_service.get(dataset_id)  # NotFoundError는 get이 던짐
+        return self.source_repo.list_by_dataset(dataset_id)
+
+    def source_spectrogram(
+        self, source_id: int, *, max_cols: int = 800
+    ) -> SpectrogramData:
+        """원본 통 음원 멜 스펙트로그램 (docs/16). 계산은 audio/에 위임."""
+        source = self.source_repo.get(source_id)
+        if source is None:
+            raise NotFoundError(f"SourceFile {source_id}를 찾을 수 없습니다.")
+        return mel_spectrogram(
+            self.storage.local_path(source.storage_path), max_cols=max_cols
+        )
 
     def _resolve_dataset(
         self, project_id: int, dataset_id: int | None

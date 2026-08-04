@@ -9,6 +9,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.audio.spectrogram import SpectrogramData, mel_spectrogram
 from app.audio.waveform import waveform_peaks
 from app.core.exceptions import NotFoundError
 from app.models.segment import Segment
@@ -35,6 +36,13 @@ class SegmentService:
         segment = self.get(segment_id)
         peaks = waveform_peaks(storage.local_path(segment.storage_path), bins=bins)
         return segment, peaks
+
+    def spectrogram(
+        self, segment_id: int, storage: StorageBackend, *, max_cols: int = 240
+    ) -> SpectrogramData:
+        """세그먼트 멜 스펙트로그램 (docs/16). 계산은 audio/에 위임."""
+        segment = self.get(segment_id)
+        return mel_spectrogram(storage.local_path(segment.storage_path), max_cols=max_cols)
 
     def delete(self, segment_id: int, storage: StorageBackend) -> None:
         """세그먼트 1개 삭제 — 파일 + row (docs/12 B1)."""

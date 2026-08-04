@@ -39,6 +39,14 @@ const config: Config = {
           warn: "#c39344",
           error: "#c96a58",
         },
+        // 스펙트로그램 순차 램프 (단일 회청 hue, 밝음→어두움 — dataviz 순차 규칙).
+        // 캔버스 렌더링은 CSS 클래스를 못 쓰므로 Spectrogram.tsx가 이 값을 직접 import한다.
+        spectro: {
+          0: "#fbfdfe",
+          1: "#b7cfe4",
+          2: "#4f7bab",
+          3: "#17293d",
+        },
         // 대시보드 KPI 카드 등, 카드별로 구분이 필요할 때 순서대로 돌려 쓰는 톤 팔레트.
         chip: {
           1: "#D1EAF0",

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { LabelValuesForm } from "@/components/datasets/LabelValuesForm";
 import { SegmentWaveform } from "@/components/datasets/SegmentWaveform";
+import { Spectrogram } from "@/components/datasets/Spectrogram";
 import { Button } from "@/components/ui/Button";
 import { deleteSegment, segmentAudioUrl, updateSegmentLabels } from "@/lib/api";
 import { formatDuration } from "@/lib/format";
@@ -114,6 +115,7 @@ export function SegmentTable({
               <tr className="text-left text-content-subtle">
                 <th className="pb-2 pr-2 font-normal">재생</th>
                 <th className="pb-2 pr-4 font-normal">파형</th>
+                <th className="pb-2 pr-4 font-normal">스펙트럼</th>
                 <th className="pb-2 pr-4 font-normal">파일명</th>
                 <th className="pb-2 pr-4 font-normal">길이</th>
                 <th className="pb-2 pr-4 font-normal">Sample Rate</th>
@@ -141,6 +143,9 @@ export function SegmentTable({
                   </td>
                   <td className="py-2 pr-4">
                     <SegmentWaveform segmentId={s.id} />
+                  </td>
+                  <td className="py-2 pr-4">
+                    <Spectrogram kind="segment" id={s.id} />
                   </td>
                   <td className="py-2 pr-4 text-content">{s.filename}</td>
                   <td className="py-2 pr-4 text-content-muted">

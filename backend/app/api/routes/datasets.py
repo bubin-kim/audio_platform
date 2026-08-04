@@ -11,7 +11,12 @@ from app.background.worker import run_export_job
 from app.schemas.common import Page
 from app.schemas.dataset import DatasetRead
 from app.schemas.job import JobRead
-from app.schemas.segment import LabelUpdate, SegmentRead, WaveformRead
+from app.schemas.segment import (
+    LabelUpdate,
+    SegmentRead,
+    SpectrogramRead,
+    WaveformRead,
+)
 from app.services.dataset_service import DatasetService
 from app.services.segment_service import SegmentService
 from app.storage.base import StorageBackend
@@ -150,6 +155,26 @@ def get_segment_waveform(
     response.headers["Cache-Control"] = "private, max-age=3600"
     return WaveformRead(
         segment_id=segment.id, duration_sec=segment.duration_sec, peaks=peaks
+    )
+
+
+@router.get(
+    "/segments/{segment_id}/spectrogram",
+    response_model=SpectrogramRead,
+    summary="세그먼트 미니 멜 스펙트로그램 (docs/16)",
+)
+def get_segment_spectrogram(
+    segment_id: int,
+    response: Response,
+    db: Session = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage_dep),
+) -> SpectrogramRead:
+    spec = SegmentService(db).spectrogram(segment_id, storage)
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    return SpectrogramRead(
+        duration_sec=spec.duration_sec, sample_rate=spec.sample_rate,
+        n_mels=spec.n_mels, cols=spec.cols, fmax=spec.fmax,
+        db_floor=spec.db_floor, db_ceil=spec.db_ceil, data=spec.data_b64,
     )
 
 

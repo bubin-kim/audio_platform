@@ -96,6 +96,18 @@ export interface Waveform {
   peaks: number[];
 }
 
+/** 멜 스펙트로그램 (docs/16). data는 uint8(0~100) n_mels×cols base64, 행 0=최저음. */
+export interface Spectrogram {
+  duration_sec: number;
+  sample_rate: number;
+  n_mels: number;
+  cols: number;
+  fmax: number;
+  db_floor: number;
+  db_ceil: number;
+  data: string;
+}
+
 // --- Upload ---
 
 export interface SourceRead {

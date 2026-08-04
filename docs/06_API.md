@@ -77,8 +77,11 @@
 | | GET | `/api/datasets/{id}/export/download` | 최근 완료된 CSV 다운로드 | 200 |
 | | DELETE | `/api/datasets/{id}?confirm=이름` | 데이터셋 삭제 (세그먼트·원본·CSV 포함) | 204/400 |
 | Segment | GET | `/api/segments/{id}/waveform` | 미니 파형 피크 (시각 비교용) | 200 |
+| | GET | `/api/segments/{id}/spectrogram` | 멜 스펙트로그램 (docs/16) | 200 |
 | | DELETE | `/api/segments/{id}` | 세그먼트 1개 삭제 (파일 포함) | 204 |
 | Upload | POST | `/api/uploads` | 원본 업로드(+메타추출) | 201 |
+| | GET | `/api/datasets/{id}/sources` | 원본 파일 목록 (docs/16) | 200 |
+| | GET | `/api/source-files/{id}/spectrogram` | 원본 멜 스펙트로그램 (docs/16) | 200 |
 | | DELETE | `/api/source-files/{id}` | 원본 삭제 (참조 세그먼트 있으면 409) | 204/409 |
 | Processing | POST | `/api/datasets/{id}/process` | 커팅 Job 시작 | 202 |
 | Job | GET | `/api/jobs/{id}` | Job 상태·진행률 | 200 |
@@ -187,6 +190,25 @@ Dataset의 모든 Segment를 CSV로 생성. 큰 데이터셋 대비 **Job으로 
 - `peaks`: 오디오를 60개 구간으로 나눈 구간별 |진폭| 최대값, **풀스케일(1.0) 기준 절대값**.
   세그먼트별 정규화를 하지 않으므로 세그먼트 간 파형 높이를 그대로 비교할 수 있다.
 - 세그먼트 파일은 불변이라 `Cache-Control: private, max-age=3600`으로 캐시된다.
+
+### 4.6 스펙트로그램·원본 목록 (docs/16 — V2-8)
+
+| 엔드포인트 | 설명 |
+|---|---|
+| `GET /api/segments/{id}/spectrogram` | 세그먼트 멜 스펙트로그램 (열 상한 240) |
+| `GET /api/source-files/{id}/spectrogram` | 원본 통 음원 멜 스펙트로그램 (열 상한 800) |
+| `GET /api/datasets/{id}/sources` | 원본 파일 목록 `Page[SourceRead]` (uploaded_by 포함) |
+
+**응답 200 `SpectrogramRead`**
+```json
+{ "duration_sec": 184.1, "sample_rate": 48000, "n_mels": 96, "cols": 800,
+  "fmax": 24000, "db_floor": -80.0, "db_ceil": 0.0, "data": "<base64>" }
+```
+- `data`: uint8(0~100) `n_mels×cols` 행렬의 base64 (row-major, 행 0=최저음).
+  dB는 풀스케일 기준 절대값(db_floor~db_ceil) 양자화 — **파일별 정규화 없음**
+  (waveform과 같은 이유: 파일 간 밝기 비교 가능).
+- 주파수 축은 멜(로그) 스케일, fmax=sr/2 — 도메인 전용 설정 없음(P1).
+- 파일 불변 → `Cache-Control: private, max-age=3600`.
 
 ---
 
