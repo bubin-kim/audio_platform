@@ -80,9 +80,14 @@ localhost라 한 사람만 쓸 수 있다. 연구실에 상주 PC가 없으므�
     `/api/segments/{id}/audio`·`/waveform`·`/export/download`는 `?token=<token>`
     쿼리 파라미터도 허용. (Vercel↔Railway는 도메인이 달라 서드파티 쿠키가 차단되므로
     쿠키 방식은 채택하지 않는다.)
-- 프론트: 첫 진입 시 토큰 입력 화면 → `localStorage` 저장 → `api.ts request()`가 헤더
-  부착, 미디어 URL 헬퍼가 쿼리 토큰 부착. 401 수신 시 토큰 화면으로 복귀.
-- 토큰 교체 = Railway env 변경 + 재배포 + 구성원에게 새 토큰 공지(런북에 절차).
+- 프론트: 첫 진입 시 토큰 입력 화면 → **1st-party 쿠키** 저장(`lib/auth.ts` —
+  미들웨어와 SSR fetch가 같은 쿠키를 읽음; 구현 과정에서 localStorage 대신 채택) →
+  `api.ts request()`가 헤더 부착, 미디어 URL 헬퍼가 쿼리 토큰 부착.
+- **401 수신 시 `/logout` 경유**(쿠키 삭제 → `/login`). 쿠키를 지우지 않고 /login으로
+  직행하면 미들웨어가 "토큰 있음"으로 /에 되돌려 무한 루프 → SSR 500이 된다
+  (실사고 2026-07-18: 토큰 교체 후 Application error, 수정 `ae37fb9`).
+- 토큰 교체 = Railway env 변경(CLI로) + 구성원에게 새 토큰 공지(런북에 절차).
+  기존 접속자는 첫 요청에서 401 → 자동으로 로그인 화면으로 돌아온다.
 
 ## 7. 설계 4 — 배포 구성
 
