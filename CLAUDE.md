@@ -64,6 +64,7 @@
 | 13_deployment.md | DP 배포 설계 (Vercel+Railway+Drive 주 저장소·인증) | 배포 작업 시 |
 | 14_notification.md | V2-6 ntfy 푸시 + 커팅 품질 검사(기대 조각 수) 설계 | 알림·품질 검사 변경 전 |
 | 15_collection_uploader.md | V2-7 수집 진행률(개수)·업로더 기록 설계 | 진행률 지표·업로드 기록 변경 전 |
+| 16_spectrogram.md | V2-8 스펙트로그램 시각화 + 원본 섹션 설계 (지연 로드 사고 기록 포함) | 시각화 컴포넌트·세그먼트별 미니 위젯 추가 전 |
 
 큰 기능은 이 패턴을 따른다: **설계 문서(docs/NN)를 먼저 쓰고 사용자 승인 → 문서대로 구현**
 (06→MVP, 07→V2-1, 09→V2-3, 10→V2-4, 11→V2-5 전부 이렇게 진행됨).
@@ -146,6 +147,10 @@ cd frontend && npm run build          # 프론트 타입체크 + 빌드
 - 배포 명령: 백엔드는 저장소 루트에서 `railway up --detach` (업로드 컨텍스트=루트,
   `RAILWAY_DOCKERFILE_PATH=backend/Dockerfile`), 프론트는 `cd frontend && vercel deploy --prod`.
   배포 후 `railway logs`에서 마이그레이션 적용 줄을 확인한다.
+- **함정**: 루트에 `.dockerignore`가 있어야 한다(존재함, 지우지 말 것) — 없으면
+  `node_modules`·`.venv` 등 900MB+ 전체가 매번 업로드돼 `railway up`이 반복
+  timeout 난다. 저장소 루트에 큰 오디오 파일(진단용 등)을 두면 같은 증상이
+  재발하니 **스크래치 경로에 두거나 작업 후 옮길 것** (실사고: `2e36f00`).
 - env 변경은 **CLI로**: `railway variables --set "KEY=값"` (`--skip-deploys` 없이면
   자동 재배포). 대시보드의 Generate 버튼은 **임의 보안값을 넣으므로** 직접 타이핑할 것.
 - **비밀값(ACCESS_TOKEN·NOTION_API_KEY·NTFY_TOPIC·GOOGLE_OAUTH_*)은 Railway env가
@@ -230,7 +235,15 @@ cd frontend && npm run build          # 프론트 타입체크 + 빌드
 - ✅ **V2-7**: 수집 진행률(개수) 게이지 + 업로더 기록 완료 (설계 docs/15) — `1e3b961`
   target_segment_count(수집 목표) → 대시보드 원형 게이지, 업로드 시 연구원 이름
   (자기 신고, localStorage 기억) → 이력·Notion 연구노트 기록. 실서버 E2E 검증 2026-07-17.
-- **최신 마일스톤 커밋**: `1e3b961` (V2-7)
+- ✅ **V2-8**: 멜 스펙트로그램 시각화 + 원본 파일 섹션 완료 (설계 docs/16) — `2e36f00`
+  환경음에 묻힌 이벤트(경적 등)가 웨이브폼엔 안 보여도 스펙트로그램 대역 무늬로
+  보임. 원본/세그먼트 스펙트로그램 API 3종 + 프론트 캔버스 렌더(순차 램프 토큰
+  `spectro`). **실사고 수정 포함**: 세그먼트별 파형+스펙트럼이 마운트 즉시 fetch되어
+  37세그먼트 데이터셋에서 DB 커넥션 풀 고갈로 기존 파형 기능까지 회귀 —
+  `useLazyVisible`(뷰포트 진입 시 로드)로 수정, 실서버 재검증 통과 2026-08-04.
+  부수 수정: 루트 `.dockerignore` 신설(무관한 956MB 업로드로 `railway up`이
+  반복 timeout 나던 것도 함께 해결).
+- **최신 마일스톤 커밋**: `2e36f00` (V2-8)
 - 남은 V2 자리: GitHub(Dataset 버전), AI Assistant, Auth.
 
 ## 12. 하지 말 것 (Don'ts)
