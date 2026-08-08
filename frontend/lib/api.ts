@@ -211,6 +211,12 @@ export const getSourceSpectrogram = (
     { cache: "force-cache" },
   );
 
+/** 원본 전체 파형 (docs/16). 파일 불변 → 브라우저 캐시 허용. */
+export const getSourceWaveform = (sourceFileId: number, bins = 1200) =>
+  request<Waveform>(`/source-files/${sourceFileId}/waveform${qs({ bins })}`, {
+    cache: "force-cache",
+  });
+
 export const listDatasetSources = (datasetId: number) =>
   request<Page<SourceRead>>(`/datasets/${datasetId}/sources`);
 

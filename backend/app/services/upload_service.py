@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.audio.metadata import extract_metadata
 from app.audio.spectrogram import SpectrogramData, mel_spectrogram
+from app.audio.waveform import waveform_peaks
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.hooks.events import on_upload_complete
 from app.models.source_file import SourceFile
@@ -80,6 +81,18 @@ class UploadService:
         """데이터셋의 원본 목록 (docs/16 — 원본 섹션). 없는 dataset이면 404."""
         self.dataset_service.get(dataset_id)  # NotFoundError는 get이 던짐
         return self.source_repo.list_by_dataset(dataset_id)
+
+    def source_waveform(self, source_id: int, *, bins: int = 1200) -> tuple[float, list[float]]:
+        """원본 통 파일의 전체 파형 피크 (docs/16 §B). (duration, peaks) 반환.
+
+        세그먼트 미니 파형(60칸)보다 훨씬 촘촘하게 뽑는다 — 3분 원본에서
+        경적처럼 짧은 이벤트의 위치를 눈으로 찾으려면 해상도가 필요하다.
+        """
+        source = self.source_repo.get(source_id)
+        if source is None:
+            raise NotFoundError(f"SourceFile {source_id}를 찾을 수 없습니다.")
+        peaks = waveform_peaks(self.storage.local_path(source.storage_path), bins=bins)
+        return source.duration_sec or 0.0, peaks
 
     def source_spectrogram(
         self, source_id: int, *, max_cols: int = 800, mode: str = "absolute"

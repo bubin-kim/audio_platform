@@ -74,6 +74,49 @@ export const CUTTING_MODES: {
       },
     ],
   },
+  {
+    value: "event_detection",
+    label: "이벤트 검출 — 소리 나는 지점만 찾아 자르기",
+    fields: [
+      {
+        key: "segment_sec",
+        label: "조각 길이(초)",
+        required: true,
+        step: 0.5,
+        placeholder: "예: 5",
+      },
+      {
+        key: "pre_pad_sec",
+        label: "이벤트 앞 여유(초)",
+        step: 0.5,
+        placeholder: "비우면 조각 길이의 절반",
+      },
+      {
+        key: "band_low_hz",
+        label: "검출 대역 하한(Hz)",
+        step: 50,
+        placeholder: "예: 1900 (비우면 전대역)",
+      },
+      {
+        key: "band_high_hz",
+        label: "검출 대역 상한(Hz)",
+        step: 50,
+        placeholder: "예: 2100 (하한과 함께 입력)",
+      },
+      {
+        key: "z_threshold",
+        label: "검출 민감도(z — 낮출수록 많이 잡음)",
+        step: 0.5,
+        placeholder: "기본 4.0",
+      },
+      {
+        key: "min_gap_sec",
+        label: "이벤트 최소 간격(초)",
+        step: 0.5,
+        placeholder: "기본 3.0",
+      },
+    ],
+  },
 ];
 
 /** Project.cutting_params(숫자) → 폼 입력값(문자열). */

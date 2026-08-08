@@ -13,7 +13,11 @@ from app.audio.cutting.base import (
 )
 
 # 전략 등록 (import 부수효과로 register_strategy 실행).
-from app.audio.cutting import fixed_interval, silence_based  # noqa: F401,E402
+from app.audio.cutting import (  # noqa: F401,E402
+    event_detection,
+    fixed_interval,
+    silence_based,
+)
 
 __all__ = [
     "CutStrategy",

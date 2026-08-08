@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Spectrogram } from "@/components/datasets/Spectrogram";
+import { SourceWaveform } from "@/components/datasets/SourceWaveform";
 import { Card } from "@/components/ui/Card";
 import { listDatasetSources } from "@/lib/api";
 import { formatDuration } from "@/lib/format";
@@ -92,7 +93,7 @@ function SourceRow({
             className="text-xs text-accent hover:underline"
             aria-expanded={open}
           >
-            {open ? "스펙트로그램 접기" : "스펙트로그램 보기"}
+            {open ? "시각화 접기" : "파형·스펙트로그램 보기"}
           </button>
         </td>
       </tr>
@@ -120,6 +121,12 @@ function SourceRow({
                   {label}
                 </button>
               ))}
+            </div>
+            <div className="mb-3">
+              <p className="mb-1 text-xs text-content-subtle">
+                전체 파형 — 세로=진폭, 가로=시간. ▲는 평균보다 크게 튄 지점(후보)
+              </p>
+              <SourceWaveform sourceId={source.id} width={760} height={120} />
             </div>
             <Spectrogram
               kind="source"

@@ -19,7 +19,7 @@ from app.api.deps import get_db, get_storage_dep
 from app.core.config import get_settings
 from app.core.exceptions import PayloadTooLargeError
 from app.schemas.common import Page
-from app.schemas.segment import SpectrogramRead
+from app.schemas.segment import SpectrogramRead, WaveformRead
 from app.schemas.upload import SourceRead, UploadResult
 from app.services.dataset_service import DatasetService
 from app.services.upload_service import UploadedFile, UploadService
@@ -121,3 +121,21 @@ def get_source_spectrogram(
         n_mels=spec.n_mels, cols=spec.cols, fmax=spec.fmax,
         db_floor=spec.db_floor, db_ceil=spec.db_ceil, data=spec.data_b64,
     )
+
+
+@router.get(
+    "/source-files/{source_file_id}/waveform",
+    response_model=WaveformRead,
+    summary="원본 전체 파형 피크 (docs/16 — 원본 섹션 시각화)",
+)
+def get_source_waveform(
+    source_file_id: int,
+    response: Response,
+    bins: int = Query(1200, ge=60, le=4000, description="가로 해상도(구간 수)"),
+    db: Session = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage_dep),
+) -> WaveformRead:
+    duration, peaks = UploadService(db, storage).source_waveform(source_file_id, bins=bins)
+    # 원본 파일은 불변 → 캐시 허용 (세그먼트 파형과 동일 정책)
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    return WaveformRead(segment_id=source_file_id, duration_sec=duration, peaks=peaks)
