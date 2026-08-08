@@ -6,7 +6,7 @@ DB 접근은 Repository, 커팅 전략 유효성은 audio registry로 위임한�
 
 from sqlalchemy.orm import Session
 
-from app.audio.cutting import available_strategies
+from app.audio.cutting import available_strategies, get_strategy
 from app.core.exceptions import NotFoundError, ValidationError
 from app.hooks.events import on_project_created
 from app.models.project import Project
@@ -24,6 +24,7 @@ class ProjectService:
 
     def create(self, data: ProjectCreate) -> Project:
         self._validate_cutting_mode(data.cutting_mode)
+        self._validate_cutting_params(data.cutting_mode, data.cutting_params)
         project = Project(
             name=data.name,
             domain=data.domain,
@@ -89,3 +90,14 @@ class ProjectService:
                 f"알 수 없는 cutting_mode='{mode}'. "
                 f"사용 가능: {available_strategies()}"
             )
+
+    def _validate_cutting_params(self, mode: str, params: dict) -> None:
+        """전략이 요구하는 파라미터를 생성 시점에 검사한다(fail-fast).
+
+        없으면 커팅 Job을 돌릴 때야 실패해서, 업로드까지 마친 뒤에 막힌다.
+        전략별 규칙은 각 전략의 validate_params가 갖는다(P1 — 여기 분기 없음).
+        """
+        try:
+            get_strategy(mode).validate_params(params)
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc

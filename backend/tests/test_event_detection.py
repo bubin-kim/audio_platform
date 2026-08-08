@@ -111,3 +111,62 @@ def test_empty_file_yields_nothing(tmp_path: Path) -> None:
     sf.write(path, np.zeros(0, dtype=np.float32), SR, subtype="PCM_16")
     strategy = EventDetectionStrategy()
     assert list(strategy.cut(path, {"segment_sec": 4.0})) == []
+
+
+# --- 프로젝트 생성 시점 파라미터 검증 (fail-fast) ---
+
+
+def test_project_create_rejects_missing_required_param(client) -> None:
+    """필수 파라미터가 없으면 프로젝트 생성에서 400 — 커팅 때까지 미루지 않는다.
+
+    이전에는 생성이 통과하고 업로드까지 마친 뒤 커팅 Job에서야 실패했다.
+    """
+    r = client.post(
+        "/api/projects",
+        json={
+            "name": "누락 검증",
+            "domain": None,
+            "cutting_mode": "event_detection",
+            "cutting_params": {},  # segment_sec 없음
+            "naming_pattern": "{date}_{seq:03d}",
+            "label_schema": [],
+        },
+    )
+    assert r.status_code == 400
+    assert "segment_sec" in r.json()["detail"]
+
+
+def test_project_create_rejects_half_specified_band(client) -> None:
+    """대역은 하한·상한을 함께 줘야 한다."""
+    r = client.post(
+        "/api/projects",
+        json={
+            "name": "대역 검증",
+            "domain": None,
+            "cutting_mode": "event_detection",
+            "cutting_params": {"segment_sec": 5.0, "band_low_hz": 1900},
+            "naming_pattern": "{date}_{seq:03d}",
+            "label_schema": [],
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_project_create_accepts_valid_event_params(client) -> None:
+    r = client.post(
+        "/api/projects",
+        json={
+            "name": "정상 설정",
+            "domain": None,
+            "cutting_mode": "event_detection",
+            "cutting_params": {
+                "segment_sec": 5.0,
+                "pre_pad_sec": 2.0,
+                "band_low_hz": 1900,
+                "band_high_hz": 2100,
+            },
+            "naming_pattern": "{date}_{seq:03d}",
+            "label_schema": [],
+        },
+    )
+    assert r.status_code == 201
