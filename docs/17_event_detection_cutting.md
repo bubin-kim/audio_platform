@@ -127,6 +127,44 @@
   최댓값은 항상 그 이상이라 사실상 무의미해 파라미터에서 제외했다.
 - *재탐색 창 ±1.0초*: FP가 크게 늘었다(004에서 18개). ±1.5초가 최선.
 
+## 2f. 평가 모듈 — 파라미터 판단의 기준 (2026-08-13)
+
+**탐지기와 동급으로 취급한다.** 파라미터를 바꿀 때마다 GT 대비 수치로 확인하지
+않으면, 그럴듯해 보이는 변경이 실제로는 성능을 떨어뜨린다(§2b·§2e의 기각 사례들이
+전부 이 방식으로 걸러졌다).
+
+| 구성 | 위치 | 역할 |
+|---|---|---|
+| 순수 모듈 | `app/audio/evaluation.py` | GT 매칭 → TP/FP/FN·Recall·Precision·F1 |
+| CLI | `backend/scripts/evaluate_detection.py` | 파라미터 스윕 → 비교표 |
+| GT 저장소 | `backend/gt/*.json` | 파일별 정답 타임스탬프 (새 파일은 JSON 하나 추가) |
+
+**매칭 규칙**: 각 탐지는 tolerance(기본 1.5초) 안의 **아직 매칭 안 된** GT 중
+가장 가까운 것과 짝지어진다. 한 GT는 한 번만 매칭된다 — 같은 자리를 여러 번
+찍는 것으로 성능이 부풀려지지 않게 하기 위함.
+
+**사용 예**:
+```bash
+cd backend
+# 파라미터 훑기
+uv run python scripts/evaluate_detection.py \
+    --audio ~/파일럿_004.WAV --gt gt/pilot_004.json \
+    --audio ~/파일럿_005.WAV --gt gt/pilot_005.json \
+    --sweep height_db=4,5,6,7
+
+# 놓친 것·헛것 목록까지
+uv run python scripts/evaluate_detection.py ... --detail
+```
+
+CLI로 재확인한 threshold 스윕(제시된 실험과 일치):
+
+| height_db | 004 R | 005 R | 전체 F1 |
+|---|---|---|---|
+| 4 | 77.4% | 80.0% | 80.0 |
+| **5** | **77.4%** | **80.0%** | **80.6** |
+| 6 | 58.1% | 80.0% | 75.4 |
+| 7 | 25.8% | 80.0% | 66.1 |
+
 ## 3. 전처리 (`audio/preprocess.py` 신설 — 순수 로직 P2)
 
 ```
