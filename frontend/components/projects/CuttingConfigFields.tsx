@@ -12,6 +12,9 @@ type CuttingParamField = {
   required?: boolean;
   step?: number;
   placeholder?: string; // 비웠을 때 적용되는 백엔드 기본값 안내
+  /** "bool"이면 체크박스로 렌더링 (기본은 숫자 입력) */
+  type?: "number" | "bool";
+  hint?: string; // 체크박스 아래 설명
 };
 
 export const CUTTING_MODES: {
@@ -114,6 +117,12 @@ export const CUTTING_MODES: {
         step: 0.5,
         placeholder: "기본 4 (검증값)",
       },
+      {
+        key: "periodic_rescue",
+        label: "주기 재탐색",
+        type: "bool",
+        hint: "소리가 일정 간격으로 반복될 때, 소음에 묻혀 놓친 지점을 되살립니다. 놓치는 건 줄지만(파일럿 실측 FN 7→3) 헛것도 늘어 사람 확인이 필요합니다.",
+      },
     ],
   },
 ];
@@ -131,11 +140,15 @@ export function paramsToStrings(
 export function stringsToParams(
   mode: string,
   values: Record<string, string>,
-): Record<string, number> {
+): Record<string, number | boolean> {
   const fields = CUTTING_MODES.find((m) => m.value === mode)?.fields ?? [];
-  const out: Record<string, number> = {};
+  const out: Record<string, number | boolean> = {};
   for (const f of fields) {
     const raw = (values[f.key] ?? "").trim();
+    if (f.type === "bool") {
+      if (raw === "true") out[f.key] = true;
+      continue;
+    }
     if (raw !== "" && !Number.isNaN(Number(raw))) out[f.key] = Number(raw);
   }
   return out;
@@ -167,22 +180,44 @@ export function CuttingConfigFields({
         ))}
       </select>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {def.fields.map((f) => (
-          <div key={f.key}>
-            <label className="text-xs text-content-subtle">{f.label}</label>
-            <input
-              type="number"
-              required={f.required}
-              step={f.step}
-              placeholder={f.placeholder}
-              value={values[f.key] ?? ""}
-              onChange={(e) =>
-                onValuesChange({ ...values, [f.key]: e.target.value })
-              }
-              className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
-            />
-          </div>
-        ))}
+        {def.fields.map((f) =>
+          f.type === "bool" ? (
+            <div key={f.key} className="sm:col-span-2">
+              <label className="flex items-center gap-2 text-sm text-content">
+                <input
+                  type="checkbox"
+                  checked={values[f.key] === "true"}
+                  onChange={(e) =>
+                    onValuesChange({
+                      ...values,
+                      [f.key]: e.target.checked ? "true" : "",
+                    })
+                  }
+                  className="rounded border-border"
+                />
+                {f.label}
+              </label>
+              {f.hint && (
+                <p className="mt-1 text-xs text-content-subtle">{f.hint}</p>
+              )}
+            </div>
+          ) : (
+            <div key={f.key}>
+              <label className="text-xs text-content-subtle">{f.label}</label>
+              <input
+                type="number"
+                required={f.required}
+                step={f.step}
+                placeholder={f.placeholder}
+                value={values[f.key] ?? ""}
+                onChange={(e) =>
+                  onValuesChange({ ...values, [f.key]: e.target.value })
+                }
+                className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
+              />
+            </div>
+          ),
+        )}
       </div>
     </div>
   );

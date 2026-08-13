@@ -222,3 +222,68 @@ def test_project_create_rejects_invalid_band(client) -> None:
     )
     assert r.status_code == 400
     assert "band_low_hz" in r.json()["detail"]
+
+
+# --- 주기 재탐색 (선택 기능) ---
+
+
+def test_periodic_rescue_off_by_default(tmp_path: Path) -> None:
+    """기본은 꺼짐 — 불규칙한 도메인에서는 오탐만 늘기 때문."""
+    from app.audio.cutting.event_detection import DEFAULTS
+
+    assert DEFAULTS["periodic_rescue"] is False
+    wav = _make_file(tmp_path, [8.0, 20.0, 32.0])
+    assert all(not e.rescued for e in EventDetectionStrategy().detect_events(wav, {}))
+
+
+def test_periodic_rescue_fills_grid_gap(tmp_path: Path) -> None:
+    """규칙적 반복 중 비어 있는 격자 자리를 후보로 되살린다.
+
+    합성 배경에서도 오탐이 섞이므로 "24초가 정확히 잡힌다"가 아니라
+    **재탐색이 격자 빈 자리를 추가 후보로 올린다**는 계약을 검증한다.
+    실파일 효과(FN 7→3)는 GT로 별도 확인 — docs/17.
+    """
+    # 배경을 아주 조용하게 해 1차 오탐을 줄인다
+    times = [6.0, 12.0, 18.0, 30.0, 36.0]  # 24초 자리는 비어 있음
+    rng = np.random.default_rng(7)
+    n = int(45 * SR)
+    raw = rng.normal(0, 0.002, n)
+    y = (np.convolve(raw, np.ones(128) / 128, mode="same") * 6.0).astype(np.float32)
+    for t in times:
+        a = int(t * SR)
+        b = min(n, a + int(0.6 * SR))
+        tt = np.arange(b - a) / SR
+        y[a:b] += (0.3 * np.sin(2 * np.pi * 2000 * tt) * np.hanning(b - a)).astype(
+            np.float32
+        )
+    path = tmp_path / "periodic.wav"
+    sf.write(path, y, SR, subtype="PCM_16")
+
+    strategy = EventDetectionStrategy()
+    base = strategy.detect_events(path, {})
+    with_rescue = strategy.detect_events(path, {"periodic_rescue": True})
+
+    rescued = [e for e in with_rescue if e.rescued]
+    assert rescued, "재탐색이 아무 후보도 올리지 않았다"
+    assert len(with_rescue) > len(base)
+    # 되살린 후보는 1차 피크와 겹치지 않는다 (같은 자리를 두 번 세지 않는다)
+    base_times = [e.center_sec for e in base]
+    for r in rescued:
+        assert all(abs(r.center_sec - b) > 1.0 for b in base_times)
+
+
+def test_rescue_needs_enough_peaks(tmp_path: Path) -> None:
+    """피크가 3개 미만이면 주기를 추정할 수 없으므로 그냥 넘어간다."""
+    wav = _make_file(tmp_path, [10.0], duration=20.0)
+    events = EventDetectionStrategy().detect_events(wav, {"periodic_rescue": True})
+    assert all(not e.rescued for e in events)
+
+
+def test_rescued_flag_in_metadata(tmp_path: Path) -> None:
+    """건져낸 조각은 메타데이터로 구분된다 — 사람이 우선 확인할 수 있게."""
+    wav = _make_file(tmp_path, [6.0, 12.0, 18.0, 24.0, 30.0])
+    segments = list(
+        EventDetectionStrategy().cut(wav, {"periodic_rescue": True})
+    )
+    assert segments
+    assert all("rescued" in (s.detection or {}) for s in segments)
