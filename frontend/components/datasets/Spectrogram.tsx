@@ -8,6 +8,7 @@ import type {
   SpectrogramMode,
 } from "@/lib/types";
 import { useLazyVisible } from "@/lib/useLazyVisible";
+import { formatHz, hzToRatio, pickFrequencyTicks } from "@/lib/mel";
 import config from "@/tailwind.config";
 
 /**
@@ -52,12 +53,15 @@ export function Spectrogram({
   width = 120,
   height = 28,
   mode = "absolute",
+  showAxis = false,
 }: {
   kind: "segment" | "source";
   id: number;
   width?: number;
   height?: number;
   mode?: SpectrogramMode;
+  /** 주파수 눈금(Hz) 표시 — 큰 화면에서만. 미니 위젯은 공간이 없어 끈다. */
+  showAxis?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [wrapRef, visible] = useLazyVisible<HTMLDivElement>();
@@ -120,7 +124,7 @@ export function Spectrogram({
     );
   }
 
-  return (
+  const canvas = (
     <canvas
       ref={canvasRef}
       role="img"
@@ -129,5 +133,55 @@ export function Spectrogram({
       className="rounded border border-border"
       style={{ width, height, imageRendering: "auto" }}
     />
+  );
+
+  if (!showAxis) return canvas;
+
+  // 눈금은 멜 스케일 위치에 찍는다 — 선형으로 찍으면 저음이 크게 어긋난다
+  // (2kHz는 높이의 8%가 아니라 41% 지점).
+  const ticks = pickFrequencyTicks(spec.fmax);
+
+  // 라벨과 눈금선은 **같은 높이 기준**(캔버스 height)에서 배치해야 어긋나지 않는다.
+  // 컨테이너에 items-stretch를 주면 라벨 영역이 캔버스보다 커져 20px씩 밀린다(실측).
+  return (
+    <div className="flex items-start gap-1">
+      <div
+        className="relative w-11 shrink-0 text-right text-[10px] leading-none text-content-subtle"
+        style={{ height }}
+        aria-hidden
+      >
+        {ticks.map((hz) => (
+          <span
+            key={hz}
+            className="absolute right-0 tabular-nums"
+            style={{
+              bottom: `${hzToRatio(hz, spec.fmax, spec.n_mels) * 100}%`,
+              transform: "translateY(50%)",
+            }}
+          >
+            {formatHz(hz)}
+          </span>
+        ))}
+      </div>
+      <div className="relative" style={{ width, height }}>
+        {canvas}
+        {/* 눈금선 — 캔버스 위에 옅게 (recessive) */}
+        <div className="pointer-events-none absolute inset-0">
+          {ticks.map((hz) => (
+            <div
+              key={hz}
+              className="absolute left-0 right-0 border-t border-white/25"
+              style={{ bottom: `${hzToRatio(hz, spec.fmax, spec.n_mels) * 100}%` }}
+            />
+          ))}
+        </div>
+      </div>
+      <span
+        className="shrink-0 text-[10px] leading-none text-content-subtle"
+        style={{ marginTop: height - 6 }}
+      >
+        Hz
+      </span>
+    </div>
   );
 }

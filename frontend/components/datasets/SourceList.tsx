@@ -134,6 +134,7 @@ function SourceRow({
               width={760}
               height={140}
               mode={mode}
+              showAxis
             />
             <p className="mt-1 text-xs text-content-subtle">
               세로=주파수(아래가 저음) · 가로=시간 · 밝을수록 큰 소리.
