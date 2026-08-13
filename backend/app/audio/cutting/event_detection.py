@@ -65,10 +65,6 @@ DEFAULTS: dict[str, Any] = {
     "channel": "mean",
     "nperseg": 2048,
     "noverlap": 1024,
-    # 주기 재탐색 (선택) — 이벤트가 규칙적으로 반복되는 녹음에서 지속 노이즈에
-    # 묻힌 것을 건진다. 기본은 꺼짐(불규칙한 도메인에서는 오탐만 늘기 때문).
-    "periodic_rescue": False,
-    "rescue_tolerance_sec": 1.5,
 }
 
 
@@ -78,8 +74,6 @@ class DetectedEvent:
 
     center_sec: float
     prominence_db: float
-    #: 주기 재탐색으로 건진 것인지 (1차 임계는 못 넘었다는 뜻 — 확인 우선순위 높음)
-    rescued: bool = False
 
 
 class EventDetectionStrategy(CutStrategy):
@@ -148,91 +142,10 @@ class EventDetectionStrategy(CutStrategy):
         peaks, _ = sig.find_peaks(
             diff, height=float(self._param(params, "height_db")), distance=distance
         )
-        events = [
-            DetectedEvent(
-                center_sec=float(times[p]),
-                prominence_db=float(diff[p]),
-                rescued=False,
-            )
+        return [
+            DetectedEvent(center_sec=float(times[p]), prominence_db=float(diff[p]))
             for p in peaks
         ]
-
-        if self._param(params, "periodic_rescue"):
-            events.extend(self._rescue_periodic(diff, times, peaks, params))
-            events.sort(key=lambda e: e.center_sec)
-        return events
-
-    def _rescue_periodic(
-        self,
-        diff: np.ndarray,
-        times: np.ndarray,
-        base_peaks: np.ndarray,
-        params: dict[str, Any],
-    ) -> list[DetectedEvent]:
-        """규칙적 반복을 이용해 놓친 이벤트를 건진다.
-
-        1차 탐지 결과에서 주기를 추정하고, 격자상 "있어야 하는데 비어 있는" 자리
-        **주변만** 다시 본다. 임계를 전역으로 낮추지 않아 오탐 증가를 억제한다.
-
-        실측 효과 (파일럿, GT 기준):
-
-        | 파일 | 기존 Recall | 재탐색 후 | FN |
-        |---|---|---|---|
-        | 004 | 77.4% | **90.3%** | 7개 → 3개 |
-        | 005 | 80.0% | **91.4%** | 7개 → 3개 |
-
-        대신 FP가 늘어난다(004: 7→10, 005: 4→6). 놓치는 것보다 헛것을 사람이
-        지우는 편이 나은 경우에만 켠다.
-        """
-        if len(base_peaks) < 3:
-            return []  # 주기를 추정할 근거가 부족
-
-        dt = float(times[1] - times[0])
-        base_times = times[base_peaks]
-        gaps = np.diff(base_times)
-        gaps = gaps[gaps >= 2.0]  # 너무 붙은 간격은 주기 추정에서 제외
-        if gaps.size == 0:
-            return []
-
-        # 주기는 간격의 중앙값. 배수 간격(놓친 자리)이 섞여도 중앙값은 기본
-        # 주기에 수렴한다. ※ 잔차 최소화로 "정밀 추정"도 해봤으나 실측상 더
-        # 나빴다(F1 81.2 → 78.9) — 신호의 실제 반복은 완전히 균일하지 않다.
-        period = float(np.median(gaps))
-        if period <= 0:
-            return []
-
-        # 격자 위상: 기존 피크들과의 오차가 최소가 되는 지점
-        best_phase, best_err = 0.0, None
-        for phase in np.arange(0, period, dt):
-            k = np.round((base_times - phase) / period)
-            err = float(np.abs(base_times - (phase + k * period)).mean())
-            if best_err is None or err < best_err:
-                best_err, best_phase = err, float(phase)
-
-        tol = float(self._param(params, "rescue_tolerance_sec"))
-        rescued: list[DetectedEvent] = []
-        k = 0
-        while best_phase + k * period <= times[-1]:
-            center = best_phase + k * period
-            k += 1
-            if center < times[0]:
-                continue
-            if np.any(np.abs(base_times - center) <= tol):
-                continue  # 이미 잡힌 자리
-
-            lo = int(max(0, (center - tol) / dt))
-            hi = int(min(len(diff), (center + tol) / dt + 1))
-            if hi <= lo:
-                continue
-            j = lo + int(np.argmax(diff[lo:hi]))
-            rescued.append(
-                DetectedEvent(
-                    center_sec=float(times[j]),
-                    prominence_db=float(diff[j]),
-                    rescued=True,
-                )
-            )
-        return rescued
 
     def _prominence_curve(
         self, mono: np.ndarray, sr: int, params: dict[str, Any]
@@ -302,7 +215,6 @@ class EventDetectionStrategy(CutStrategy):
                     ],
                     "height_db": float(self._param(params, "height_db")),
                     "channel": self._param(params, "channel"),
-                    "rescued": event.rescued,
                 },
             )
 

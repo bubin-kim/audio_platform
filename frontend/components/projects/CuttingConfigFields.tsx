@@ -117,12 +117,6 @@ export const CUTTING_MODES: {
         step: 0.5,
         placeholder: "기본 4 (검증값)",
       },
-      {
-        key: "periodic_rescue",
-        label: "주기 재탐색",
-        type: "bool",
-        hint: "소리가 일정 간격으로 반복될 때, 소음에 묻혀 놓친 지점을 되살립니다. 놓치는 건 줄지만(파일럿 실측 FN 7→3) 헛것도 늘어 사람 확인이 필요합니다.",
-      },
     ],
   },
 ];
