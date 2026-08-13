@@ -117,7 +117,7 @@ export function SegmentTable({
                 <th className="pb-2 pr-4 font-normal">파형</th>
                 <th className="pb-2 pr-4 font-normal">스펙트로그램</th>
                 <th className="pb-2 pr-4 font-normal">파일명</th>
-                <th className="pb-2 pr-4 font-normal">길이</th>
+                <th className="pb-2 pr-4 font-normal">원본 위치</th>
                 <th className="pb-2 pr-4 font-normal">Sample Rate</th>
                 <th className="pb-2 pr-4 font-normal">라벨</th>
                 <th className="pb-2 pr-4 font-normal">라벨링</th>
@@ -149,7 +149,7 @@ export function SegmentTable({
                   </td>
                   <td className="py-2 pr-4 text-content">{s.filename}</td>
                   <td className="py-2 pr-4 text-content-muted">
-                    {formatDuration(s.duration_sec)}
+                    <SourcePosition segment={s} />
                   </td>
                   <td className="py-2 pr-4 text-content-muted">
                     {s.sample_rate}Hz
@@ -184,7 +184,9 @@ export function SegmentTable({
                       </div>
                     ) : (
                       Object.entries(s.labels)
-                        .filter(([, v]) => v !== "" && v !== null)
+                        // "_" 접두 키는 플랫폼 내부 메타데이터(_detection 등) —
+                        // 사용자 라벨이 아니므로 라벨 칸에 섞이면 안 된다
+                        .filter(([k, v]) => !k.startsWith("_") && v !== "" && v !== null)
                         .map(([k, v]) => `${k}=${v}`)
                         .join(", ") || "—"
                     )}
@@ -220,6 +222,40 @@ export function SegmentTable({
             </tbody>
           </table>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** 원본에서의 위치 — 검수 시 "몇 초 지점을 잡은 건지" 바로 보이게.
+ *
+ * 탐지 커팅(event_detection)은 labels._detection에 탐지 시각을 남긴다.
+ * 그 값이 있으면 함께 보여준다 — 오탐을 판정하고 GT와 대조할 때 필요하다.
+ */
+function SourcePosition({ segment }: { segment: Segment }) {
+  const start = segment.source_start_sec;
+  const end = start + segment.duration_sec;
+  const labels = segment.labels as Record<string, unknown> | undefined;
+  const detection = labels?.["_detection"] as
+    | { detected_at_sec?: number; prominence_db?: number }
+    | undefined;
+
+  return (
+    <div className="whitespace-nowrap tabular-nums">
+      <span>
+        {start.toFixed(1)}~{end.toFixed(1)}초
+      </span>
+      {detection?.detected_at_sec !== undefined && (
+        <span
+          className="ml-1 text-xs text-content-subtle"
+          title={
+            detection.prominence_db !== undefined
+              ? `탐지 시각 ${detection.detected_at_sec.toFixed(2)}초 · 배경 대비 +${detection.prominence_db.toFixed(1)}dB`
+              : undefined
+          }
+        >
+          (탐지 {detection.detected_at_sec.toFixed(1)}초)
+        </span>
       )}
     </div>
   );
