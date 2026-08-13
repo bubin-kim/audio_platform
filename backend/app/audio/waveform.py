@@ -9,20 +9,22 @@ from pathlib import Path
 
 import numpy as np
 import soundfile as sf
+
+from app.audio.channels import to_mono
 from scipy import ndimage, signal as sig
 
 
 def waveform_peaks(path: Path, bins: int = 60) -> list[float]:
     """구간별 절대 피크(0.0~1.0) bins개. 오디오가 bins보다 짧으면 실제 길이만큼.
 
-    다채널은 채널 평균으로 모노화한다. float 서브타입 등으로 1.0을 넘는 샘플은
+    다채널은 가장 또렷한 채널을 고른다(app/audio/channels.py). float 서브타입 등으로 1.0을 넘는 샘플은
     렌더링 안정성을 위해 1.0으로 클램프한다.
     """
     if bins <= 0:
         raise ValueError(f"bins는 양수여야 합니다. 받은 값: {bins!r}")
 
     samples, _sr = sf.read(str(path), dtype="float32", always_2d=True)
-    mono = np.abs(samples).mean(axis=1)  # (frames,)
+    mono = np.abs(to_mono(samples, _sr).samples)  # (frames,)
     n = mono.shape[0]
     if n == 0:
         return []
@@ -54,7 +56,7 @@ def event_score_curve(
     band가 없으면 전대역을 그대로 쓴다 — 이때는 waveform_peaks와 성격이 같다.
     """
     samples, sr = sf.read(str(path), dtype="float32", always_2d=True)
-    mono = samples.mean(axis=1)
+    mono = to_mono(samples, sr).samples
     if mono.size == 0:
         return []
 

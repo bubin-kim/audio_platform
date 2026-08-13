@@ -18,8 +18,10 @@ import librosa
 import numpy as np
 import soundfile as sf
 
+from app.audio.channels import to_mono
+
 MIN_DB_SPAN = 30.0  # 표시 범위 최소 폭 (무음 파일에서 잡음이 과장되는 것 방지)
-N_MELS = 96
+N_MELS = 128  # 주파수 해상도 (스크립트 검토 결과 96→128, 대역 구분이 또렷해짐)
 
 
 @dataclass
@@ -65,7 +67,9 @@ def mel_spectrogram(
         raise ValueError(f"mode는 absolute|contrast 여야 합니다. 받은 값: {mode!r}")
 
     samples, sr = sf.read(str(path), dtype="float32", always_2d=True)
-    mono = samples.mean(axis=1)
+    # 다채널은 가장 또렷한 채널을 고른다 — 검출(event_detection)과 같은 신호를
+    # 봐야 화면과 커팅 결과가 일치한다 (app/audio/channels.py 참조).
+    mono = to_mono(samples, sr).samples
     n = mono.shape[0]
     if n == 0:
         return SpectrogramData(

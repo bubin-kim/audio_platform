@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 from fastapi.testclient import TestClient
 
-from app.audio.spectrogram import mel_spectrogram
+from app.audio.spectrogram import N_MELS, mel_spectrogram
 from tests.conftest import upload_file
 
 
@@ -31,7 +31,7 @@ def _project(client: TestClient) -> int:
 def test_mel_spectrogram_shape_and_range(make_wav: Callable[..., Path]) -> None:
     wav = make_wav(duration_sec=2.0, name="tone.wav")
     spec = mel_spectrogram(wav, max_cols=100)
-    assert spec.n_mels == 96
+    assert spec.n_mels == N_MELS
     assert 0 < spec.cols <= 100
     raw = base64.b64decode(spec.data_b64)
     assert len(raw) == spec.n_mels * spec.cols
@@ -85,7 +85,7 @@ def test_source_list_and_spectrogram(
     assert r.status_code == 200
     assert r.headers["cache-control"] == "private, max-age=3600"
     spec = r.json()
-    assert spec["n_mels"] == 96
+    assert spec["n_mels"] == N_MELS
     assert len(base64.b64decode(spec["data"])) == spec["n_mels"] * spec["cols"]
 
 

@@ -35,6 +35,7 @@ import numpy as np
 import soundfile as sf
 from scipy import ndimage, signal as sig
 
+from app.audio.channels import to_mono
 from app.audio.cutting.base import CutStrategy, SegmentAudio, register_strategy
 
 _NFFT = 2048
@@ -67,7 +68,7 @@ class EventDetectionStrategy(CutStrategy):
         """이벤트 시각(초) 목록. 커팅 없이 검출만 — 진단·미리보기에서도 쓴다."""
         self.validate_params(params)
         samples, sr = sf.read(str(source), dtype="float32", always_2d=True)
-        mono = samples.mean(axis=1)
+        mono = self._to_mono(samples, sr, params)
         if mono.size == 0:
             return []
 
@@ -84,7 +85,7 @@ class EventDetectionStrategy(CutStrategy):
     def cut(self, source: Path, params: dict[str, Any]) -> Iterator[SegmentAudio]:
         self.validate_params(params)
         samples, sr = sf.read(str(source), dtype="float32", always_2d=True)
-        mono = samples.mean(axis=1)
+        mono = self._to_mono(samples, sr, params)
         total_sec = mono.shape[0] / sr if sr else 0.0
         if mono.size == 0:
             return
@@ -109,6 +110,20 @@ class EventDetectionStrategy(CutStrategy):
                 samples=samples[a:b],
                 sample_rate=sr,
             )
+
+    def _to_mono(
+        self, samples: np.ndarray, sr: int, params: dict[str, Any]
+    ) -> np.ndarray:
+        """분석용 모노 신호. 다채널이면 검출 대역에서 가장 또렷한 채널을 고른다.
+
+        단순 평균은 채널이 서로 다른 소리를 담을 때 신호를 희석시킨다
+        (실측: 파일럿 4채널에서 평균 대비 +1.9~3.4dB 손해 — docs/17).
+        """
+        lo, hi = params.get("band_low_hz"), params.get("band_high_hz")
+        band = (float(lo), float(hi)) if lo is not None and hi is not None else None
+        return to_mono(
+            samples, sr, channel=params.get("channel", "auto"), band=band
+        ).samples
 
     def _zscore_curve(
         self, mono: np.ndarray, sr: int, params: dict[str, Any]
