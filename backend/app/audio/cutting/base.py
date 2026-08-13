@@ -25,6 +25,10 @@ class SegmentAudio:
     end_sec: float
     samples: np.ndarray  # (frames,) 또는 (frames, channels)
     sample_rate: int
+    #: 전략이 남기는 근거 메타데이터(선택). 워커가 Segment.labels에 합쳐 저장한다 —
+    #: 예: 탐지 시점·튐 정도. 안 쓰는 전략은 비워두면 되고, 저장 형식은 JSON 직렬화
+    #: 가능한 값만 담는다.
+    detection: dict[str, Any] | None = None
 
     @property
     def duration_sec(self) -> float:

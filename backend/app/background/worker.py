@@ -191,6 +191,11 @@ def _run(
                 )
                 inherited = _sanitize_inherited(label_schema, inherited)
                 labels = {**inherited, **common_labels}
+                # 전략이 남긴 탐지 근거(탐지 시점·튐 정도 등)를 함께 보관한다.
+                # label_schema 검증 대상이 아니라 별도 키에 담는다 — 라벨링 진행률
+                # (is_labeled) 계산에 영향을 주면 안 되기 때문.
+                if seg_audio.detection:
+                    labels = {**labels, "_detection": seg_audio.detection}
 
                 meta = extract_metadata(storage.local_path(logical_path))
                 segment_repo.add(
