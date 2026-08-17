@@ -1,0 +1,64 @@
+# 시놀로지 NAS 자체 호스팅 구성 (docs/20)
+#
+# 실행: NAS의 Container Manager > 프로젝트 > 생성 시 이 파일을 지정하거나,
+#       SSH로 접속해 `docker compose -f docker-compose.nas.yml up -d`
+#
+# 데이터는 전부 NAS 볼륨에 남는다 — 클라우드 요금 0원, 용량은 NAS 크기만큼.
+# 컨테이너를 지웠다 다시 만들어도 ./data, ./db 폴더가 있으면 그대로 이어진다.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: audio
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD를 .env에 지정하세요}
+      POSTGRES_DB: audio_platform
+    volumes:
+      # NAS 실제 경로로 바뀐다 (docs/20의 설치 절차 참조)
+      - ./db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U audio -d audio_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://audio:${DB_PASSWORD}@db:5432/audio_platform
+      # NAS 로컬 저장 — Drive 불필요(요금 0원). 경로는 아래 볼륨과 짝을 이룬다.
+      STORAGE_MODE: local
+      DATA_DIR: /data
+      ACCESS_TOKEN: ${ACCESS_TOKEN:?접속 암호를 .env에 지정하세요}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3100}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-500}
+      # 선택 — 없으면 해당 기능만 꺼진다(P4)
+      NOTION_API_KEY: ${NOTION_API_KEY:-}
+      NOTION_DATABASE_ID: ${NOTION_DATABASE_ID:-}
+      NTFY_TOPIC: ${NTFY_TOPIC:-}
+      PORT: 8000
+    volumes:
+      - ./data:/data          # 원본·조각·export 전부 여기 (NAS 디스크)
+    ports:
+      - "${BACKEND_PORT:-8100}:8000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        # 브라우저가 접근할 백엔드 주소 — NAS IP나 QuickConnect 주소를 넣는다
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:?백엔드 주소를 .env에 지정하세요}
+        NEXT_PUBLIC_REQUIRE_AUTH: "true"
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-3100}:3000"
