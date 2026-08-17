@@ -185,6 +185,9 @@ class EventDetectionStrategy(CutStrategy):
         total_sec = samples.shape[0] / sr if sr else 0.0
         if samples.shape[0] == 0:
             return
+        # 원본 해상도를 조각에도 유지한다 (24bit 원본이 16bit로 떨어지면
+        # 약한 신호의 양자화 여유가 44dB까지 줄어든다 — 실측)
+        src_subtype = sf.info(str(source)).subtype
 
         before = float(self._param(params, "before_sec"))
         after = float(self._param(params, "after_sec"))
@@ -205,6 +208,7 @@ class EventDetectionStrategy(CutStrategy):
                 end_sec=end_sec,
                 samples=samples[a:b],  # ★ 원본 그대로 (가공 신호 아님)
                 sample_rate=sr,
+                subtype=src_subtype,
                 detection={
                     "source_filename": source.name,
                     "detected_at_sec": round(event.center_sec, 3),

@@ -173,7 +173,12 @@ def _run(
                 filename = render_filename(naming_pattern, values, extension="wav")
 
                 tmp_file = tmp_path / f"tmp_{seq:06d}.wav"
-                write_wav(tmp_file, seg_audio.samples, seg_audio.sample_rate)
+                write_wav(
+                    tmp_file,
+                    seg_audio.samples,
+                    seg_audio.sample_rate,
+                    subtype=seg_audio.subtype or "PCM_16",
+                )
 
                 logical_path = f"segments/{job.dataset_id}/{filename}"
                 # 조용한 덮어쓰기 금지 (docs/12 A1): 충돌은 명시적 실패로.

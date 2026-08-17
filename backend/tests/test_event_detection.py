@@ -222,3 +222,29 @@ def test_project_create_rejects_invalid_band(client) -> None:
     )
     assert r.status_code == 400
     assert "band_low_hz" in r.json()["detail"]
+
+
+def test_preserves_original_bit_depth(tmp_path: Path) -> None:
+    """24bit 원본은 24bit 조각으로 잘려야 한다.
+
+    16bit로 떨어뜨리면 약한 신호(파일럿 경보음 수준)에서 양자화 여유가
+    44dB까지 줄어든다 — 실측. 원본 해상도를 유지한다.
+    """
+    n = int(20 * SR)
+    rng = np.random.default_rng(11)
+    y = (np.convolve(rng.normal(0, 0.01, n), np.ones(64) / 64, mode="same") * 4).astype(
+        np.float32
+    )
+    for t in (6.0, 13.0):
+        a = int(t * SR)
+        b = a + int(0.6 * SR)
+        tt = np.arange(b - a) / SR
+        y[a:b] += (0.3 * np.sin(2 * np.pi * 2000 * tt) * np.hanning(b - a)).astype(
+            np.float32
+        )
+    path = tmp_path / "src24.wav"
+    sf.write(path, y, SR, subtype="PCM_24")
+
+    segments = list(EventDetectionStrategy().cut(path, {}))
+    assert segments, "이벤트를 못 찾았다"
+    assert segments[0].subtype == "PCM_24"

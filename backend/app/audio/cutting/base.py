@@ -29,6 +29,9 @@ class SegmentAudio:
     #: 예: 탐지 시점·튐 정도. 안 쓰는 전략은 비워두면 되고, 저장 형식은 JSON 직렬화
     #: 가능한 값만 담는다.
     detection: dict[str, Any] | None = None
+    #: 원본 파일의 서브타입(PCM_24 등). 조각을 같은 해상도로 저장하기 위한 것 —
+    #: None이면 기본값(PCM_16). 약한 신호를 다루는 도메인에서 중요하다.
+    subtype: str | None = None
 
     @property
     def duration_sec(self) -> float:
