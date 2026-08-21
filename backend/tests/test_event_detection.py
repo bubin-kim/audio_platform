@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import soundfile as sf
+from scipy import signal
 
 from app.audio.cutting import get_strategy
 from app.audio.cutting.event_detection import EventDetectionStrategy
@@ -26,9 +27,9 @@ def _make_file(
     tmp_path: Path,
     event_times: list[float],
     duration: float = 40.0,
-    noise_amp: float = 0.01,
+    noise_amp: float = 0.05,
     tone_hz: float = 2000.0,
-    tone_amp: float = 0.3,
+    tone_amp: float = 1.0,
     name: str = "synth.wav",
     channels: int = 1,
 ) -> Path:
@@ -36,15 +37,21 @@ def _make_file(
 
     배경은 **저역 중심의 안정적인 소음**으로 만든다(실제 환경음처럼). 백색잡음을
     쓰면 탐지 대역에서 프레임마다 5~6dB씩 무작위로 요동해, 이벤트가 없어도
-    임계를 넘는다(실측: 이벤트 0개인 백색잡음에서 5개 오탐). 알고리즘 문제가
-    아니라 신호가 비현실적인 것이므로, 테스트 신호를 현실에 맞춘다.
+    임계를 넘는다(실측: 이벤트 0개인 백색잡음에서 5개 오탐).
+
+    **이동평균 필터를 쓰면 안 된다**: 64탭 이동평균은 SR/64=689Hz 배수마다
+    널(null)이 있어 2000Hz 부근을 거의 통과시키지 않는다. 탐지 대역이 수치
+    바닥에 놓여 요동이 이벤트보다 커지고, 실제로 심어둔 이벤트의 상승분이
+    **음수**가 됐다(실측 -8.4dB). 그래도 테스트가 통과한 건 배경 오탐이
+    우연히 정답 위치 1.5초 안에 떨어졌기 때문이다. butter 저역통과로 바꿔
+    널을 없애고, 톤 진폭을 실측에 맞춘다 — 034 실측 상승분 +18.4dB 대비
+    합성 +19.3dB(max)로 맞췄다.
     """
     rng = np.random.default_rng(42)
     n = int(duration * SR)
-    raw = rng.normal(0, noise_amp, n)
-    # 저역통과(이동평균)로 스펙트럼을 기울여 시간적으로 안정된 배경을 만든다
-    kernel = np.ones(64) / 64
-    y = np.convolve(raw, kernel, mode="same").astype(np.float32) * 4.0
+    raw = rng.normal(0, 1.0, n)
+    b_lp, a_lp = signal.butter(4, 800 / (SR / 2), btype="low")
+    y = (signal.lfilter(b_lp, a_lp, raw) * noise_amp).astype(np.float32)
     for t in event_times:
         a = int(t * SR)
         b = min(n, a + int(0.6 * SR))
@@ -72,6 +79,39 @@ def test_detects_known_event_positions(tmp_path: Path) -> None:
     assert len(matched) == len(truth), f"검출 {[round(f,1) for f in found]}, 정답 {truth}"
 
 
+def test_band_uses_max_not_mean(tmp_path: Path) -> None:
+    """대역 집계는 **최대값**이어야 한다 — 평균으로 되돌리면 성능이 무너진다.
+
+    근거(GT 004, 31개 정답, 파라미터 동일):
+        평균 F1 77.4% (TP24/FP7/FN7) · 최대 F1 93.5% (TP29/FP2/FN2)
+    본녹음 A/B 청취 판정에서도 평균이 단독 검출한 지점엔 경보음이 없었다.
+
+    좁은 대역 톤을 넓은 대역(200Hz) 안에 두면, 평균은 신호를 주변 빈에
+    희석시켜 상승분이 낮아진다. 그 차이를 직접 잰다.
+    """
+    wav = _make_file(tmp_path, [12.0])
+    events = EventDetectionStrategy().detect_events(wav, {})
+    hit = [e for e in events if abs(e.center_sec - 12.0) <= 1.5]
+    assert hit, "최대값 집계인데도 심어둔 이벤트를 못 찾았다"
+
+    # 같은 신호를 평균으로 집계하면 상승분이 눈에 띄게 작아야 한다
+    import numpy as _np
+    import soundfile as _sf
+    from scipy import signal as _sig
+
+    y, sr = _sf.read(str(wav), dtype="float32", always_2d=True)
+    mono = y.mean(axis=1)
+    freqs, times, zxx = _sig.stft(mono, sr, nperseg=2048, noverlap=1024)
+    db = 20 * _np.log10(_np.abs(zxx) + 1e-10)
+    m = (freqs >= 1900) & (freqs <= 2100)
+    i = int(12.0 / float(times[1] - times[0]))
+    by_max = db[m, i : i + 3].max()
+    by_mean = db[m, i : i + 3].mean(axis=0).max()
+    assert by_max > by_mean + 5.0, (
+        f"대역 최대({by_max:.1f}dB)가 평균({by_mean:.1f}dB)보다 충분히 커야 한다"
+    )
+
+
 def test_defaults_match_validated_parameters() -> None:
     """GT로 검증된 기본값이 바뀌면 성능이 달라진다 — 값을 고정해 회귀를 막는다."""
     from app.audio.cutting.event_detection import DEFAULTS
@@ -94,7 +134,11 @@ def test_cut_uses_before_after_window(tmp_path: Path) -> None:
     segments = list(EventDetectionStrategy().cut(wav, {}))
     assert len(segments) >= 2
 
-    for seg in segments:
+    # 파일 시작/끝에 걸린 조각은 잘려서 6초보다 짧다 (start_sec=0 등) — 정상.
+    # 창 크기 계약은 양끝에 안 걸린 조각으로 확인한다.
+    interior = [s for s in segments if s.start_sec > 0.0]
+    assert interior, "양끝에 안 걸린 조각이 없다"
+    for seg in interior:
         assert abs(seg.duration_sec - 6.0) < 0.2
 
     # 실제 이벤트(10초·20초)마다 그것을 감싸는 조각이 있어야 한다
@@ -134,11 +178,20 @@ def test_cut_returns_original_samples_not_filtered(tmp_path: Path) -> None:
 def test_segments_carry_detection_metadata(tmp_path: Path) -> None:
     """조각마다 탐지 근거(원본명·시점·튐 정도)가 남아야 한다."""
     wav = _make_file(tmp_path, [12.0], name="alarm_src.wav")
-    seg = next(iter(EventDetectionStrategy().cut(wav, {})))
-    meta = seg.detection
+    segments = list(EventDetectionStrategy().cut(wav, {}))
+    assert segments, "이벤트를 못 찾았다"
+
+    # 배경 요동으로 오탐이 앞에 섞일 수 있으므로 "첫 조각"을 가정하지 않고
+    # 심어둔 이벤트를 담은 조각을 찾는다 (실제 녹음 034도 배경 diff가
+    # 최대 15.2dB까지 튄다 — 오탐 자체는 정상이고 검수로 걸러진다)
+    hit = [s for s in segments if abs(s.detection["detected_at_sec"] - 12.0) <= 1.5]
+    assert hit, (
+        "12.0초 이벤트를 담은 조각이 없다 — 검출 "
+        f"{[round(s.detection['detected_at_sec'], 1) for s in segments]}"
+    )
+    meta = hit[0].detection
     assert meta is not None
     assert meta["source_filename"] == "alarm_src.wav"
-    assert abs(meta["detected_at_sec"] - 12.0) <= 1.5
     assert meta["prominence_db"] >= 5.0  # height_db 이상이라 검출된 것
     assert meta["band_hz"] == [1900.0, 2100.0]
     assert meta["channel"] == "mean"

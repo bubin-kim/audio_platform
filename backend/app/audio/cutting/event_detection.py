@@ -9,26 +9,30 @@
 해당 주파수 빈만 **읽는** 것이라 신호 자체는 그대로다. 그리고 잘라 저장하는 것은
 언제나 **원본 샘플**이다 — 판단에만 가공(리샘플·dB 변환)을 쓰고, 결과물은 원본.
 
-**알고리즘** (사용자 청취 GT로 검증, 2026-08-13):
+**알고리즘** (사용자 청취 GT로 검증, 2026-08-21 갱신):
 ```
 1. 채널 평균 (mean)                      ← GT 검증: ch3 단독 35.5% < mean 58.1%
 2. 리샘플 48k → 44.1k (scipy.signal.resample)
 3. STFT (nperseg=2048, noverlap=1024)
-4. 타겟 대역(1900~2100Hz) dB의 프레임별 평균
+4. 타겟 대역(1900~2100Hz) dB의 프레임별 **최대값**  ← 평균 아님 (§2i)
 5. baseline diff = 현재값 - 앞뒤 25프레임(자기 제외) median
 6. find_peaks(diff, height=5.0, distance=4초)
 7. 각 피크 center 기준 **원본**에서 [center-3초, center+3초] 커팅
 ```
 
-**검증 결과** (tolerance 1.5초):
+4번을 평균→최대로 바꾼 것이 성능을 갈랐다. 찾는 이벤트가 좁은 대역의
+순음이라 대역 평균은 신호를 희석한다. 대역 폭(200Hz)이 이벤트 폭보다
+넓을수록 손해가 크다.
 
-| 파일 | GT | TP | FP | FN | Recall | Precision |
+**검증 결과** (004 GT 31개, tolerance 1.5초, 파라미터 동일):
+
+| 대역 집계 | TP | FP | FN | Recall | Precision | F1 |
 |---|---|---|---|---|---|---|
-| 004 | 31 | 24 | 7 | 7 | 77.4% | 77.4% |
-| 005 | 35 | 28 | 4 | 7 | 80.0% | 87.5% |
+| 평균(구) | 24 | 7 | 7 | 77.4% | 77.4% | 77.4% |
+| **최대(현)** | **29** | **2** | **2** | **93.5%** | **93.5%** | **93.5%** |
 
-남은 FN 원인은 ① 지속 노이즈로 prominence가 깎이는 경우 ② 두 이벤트가
-min_gap_sec보다 가까워 하나로 병합되는 구조적 한계다(docs/17).
+본녹음 5개 A/B 청취 판정에서도 최대값이 이겼다 — 평균이 단독 검출한
+지점(045 9.1초·20.9초, 024 1.2초)은 전부 경보음이 없었다(docs/17 §2i).
 
 params (전부 Project 설정 — 도메인 값은 코드에 없다, P1):
   - before_sec (3.0) / after_sec (3.0): 이벤트 앞뒤 여유
@@ -165,7 +169,10 @@ class EventDetectionStrategy(CutStrategy):
         idx = np.where((freqs >= lo) & (freqs <= hi))[0]
         if idx.size == 0:  # 대역이 나이퀴스트 밖 — 전대역으로 폴백
             idx = np.arange(len(freqs))
-        target_db = db[idx, :].mean(axis=0)
+        # 대역 **최대값**을 쓴다(평균 아님). 찾는 이벤트는 좁은 대역에 몰린
+        # 순음이라, 대역 폭만큼 평균을 내면 신호가 주변 빈에 희석된다.
+        # GT 004에서 평균 F1 77.4% vs 최대 93.5% (docs/17 §2i).
+        target_db = db[idx, :].max(axis=0)
 
         n = len(target_db)
         half = int(self._param(params, "baseline_frames")) // 2
