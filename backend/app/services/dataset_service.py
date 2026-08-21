@@ -112,6 +112,14 @@ class DatasetService:
             raise NotFoundError(f"Dataset {dataset_id}를 찾을 수 없습니다.")
         return dataset
 
+    def rename(self, dataset_id: int, name: str) -> Dataset:
+        """이름만 바꾼다 — 다른 원본이 섞여 들어간 뒤 구분용으로 재명명할 때(P1과 무관, 순수 정리)."""
+        dataset = self.get(dataset_id)
+        dataset.name = name
+        self.db.commit()
+        self.db.refresh(dataset)
+        return dataset
+
     def list_by_project(
         self, project_id: int, *, limit: int = 50, offset: int = 0
     ) -> tuple[list[Dataset], int]:

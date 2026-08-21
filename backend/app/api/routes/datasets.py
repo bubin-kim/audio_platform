@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db, get_storage_dep
 from app.background.worker import run_export_job
 from app.schemas.common import Page
-from app.schemas.dataset import DatasetRead
+from app.schemas.dataset import DatasetRead, DatasetUpdate
 from app.schemas.job import JobRead
 from app.schemas.segment import (
     LabelUpdate,
@@ -39,6 +39,17 @@ _AUDIO_MEDIA_TYPES = {
 )
 def get_dataset(dataset_id: int, db: Session = Depends(get_db)) -> DatasetRead:
     return DatasetRead.model_validate(DatasetService(db).get(dataset_id))
+
+
+@router.patch(
+    "/datasets/{dataset_id}",
+    response_model=DatasetRead,
+    summary="데이터셋 이름 변경",
+)
+def rename_dataset(
+    dataset_id: int, body: DatasetUpdate, db: Session = Depends(get_db)
+) -> DatasetRead:
+    return DatasetRead.model_validate(DatasetService(db).rename(dataset_id, body.name))
 
 
 @router.get(

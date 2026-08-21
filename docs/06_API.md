@@ -72,6 +72,7 @@
 | Dataset | GET | `/api/projects/{id}/datasets` | 프로젝트의 데이터셋 목록 | 200 |
 | | POST | `/api/projects/{id}/datasets` | 데이터셋 생성 | 201 |
 | | GET | `/api/datasets/{id}` | 상세 | 200 |
+| | PATCH | `/api/datasets/{id}` | 이름 변경 | 200 |
 | | GET | `/api/datasets/{id}/segments` | 세그먼트 목록 | 200 |
 | | GET | `/api/datasets/{id}/export` | Metadata.csv 내보내기(비동기) | 202 |
 | | GET | `/api/datasets/{id}/export/download` | 최근 완료된 CSV 다운로드 | 200 |
@@ -151,6 +152,12 @@
 **요청 `DatasetCreate`**: `{ "name": "v1 초기수집", "version": "v1" }`
 **응답 201 `DatasetRead`**: `{ "id", "project_id", "name", "version", "status", "created_at" }`
 - `status`: `"collecting" | "processing" | "ready"` (생성 시 `collecting`).
+
+### 4.1b PATCH `/api/datasets/{id}` — 이름 변경
+**요청 `DatasetUpdate`**: `{ "name": "새 이름" }` (1~200자, 빈 문자열 400)
+**응답 200 `DatasetRead`**. 다른 필드(`version`·`status`)는 이 API로 못 바꾼다.
+용도: 여러 원본을 한 Dataset에 몰아 업로드한 뒤 구분용으로 재명명하는 등
+순수 정리 목적 — 라벨·세그먼트에는 영향 없음.
 
 ### 4.2 GET `/api/datasets/{id}/segments`
 **응답 200 `Page[SegmentRead]`**. `SegmentRead`:

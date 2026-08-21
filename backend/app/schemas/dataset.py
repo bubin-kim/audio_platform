@@ -10,6 +10,10 @@ class DatasetCreate(BaseModel):
     version: str = Field(default="v1", max_length=50)
 
 
+class DatasetUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+
+
 class DatasetRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
