@@ -169,6 +169,11 @@ cd frontend && npm run build          # 프론트 타입체크 + 빌드
   끝나면 반드시 DELETE + Notion에 생긴 페이지도 아카이브한다. 실데이터 프로젝트를
   검증에 쓰지 않는다. curl로 한글 쿼리 파라미터를 보낼 땐 `-G --data-urlencode`
   (미인코딩 한글은 h11이 400으로 거부).
+- **git 원격이 2곳이다** (2026-08-21부터): `origin`이 **push 시 두 저장소 모두에**
+  올라가도록 설정됨 — 개인 계정 `bubin-kim/audio_platform`(fetch 겸용) +
+  교수님 프라이빗 `soyul5458/audio-data-platform`. 평소처럼 `git push`(또는
+  `git push origin main`) 한 번이면 둘 다 반영된다. 교수님 쪽에만 올리고
+  싶으면 `git push professor main`(별도 원격, fetch도 가능).
 
 ## 9. 작업 방식 (Claude Code 행동 규칙)
 
