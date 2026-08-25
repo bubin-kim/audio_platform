@@ -21,7 +21,7 @@ export default async function DatasetDetailPage({
   const dataset = await getDataset(datasetId);
   const [project, jobsPage, segmentsPage] = await Promise.all([
     getProject(dataset.project_id),
-    listJobs(datasetId, { limit: 20 }),
+    listJobs(datasetId, { limit: 200 }),
     listSegments(datasetId, { limit: 50 }),
   ]);
 
@@ -66,7 +66,7 @@ export default async function DatasetDetailPage({
 
         <Card className="mt-4">
           <p className="mb-3 text-sm font-medium text-content">Job 이력</p>
-          <JobList jobs={jobsPage.items} />
+          <JobList jobs={jobsPage.items} total={jobsPage.total} />
         </Card>
 
         <Card className="mt-4">
