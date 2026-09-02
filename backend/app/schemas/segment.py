@@ -34,6 +34,39 @@ class SpectrogramRead(BaseModel):
     data: str
 
 
+class BandSpectrogramRead(BaseModel):
+    """주파수 크롭 스펙트로그램(선형 STFT, 좁은 대역 확대) — 표시 전용 신규 기능.
+
+    기존 SpectrogramRead(멜 스케일 전대역)와 별개 스키마. data는
+    uint8(0~255) freq_bins×cols 행렬의 base64(row-major, 행 0=fmin).
+    dB는 top_db 기준 상대값(파일 최대값 대비 -top_db~0).
+    """
+
+    duration_sec: float
+    sample_rate: int
+    freq_bins: int
+    cols: int
+    fmin: float
+    fmax: float
+    top_db: float
+    data: str
+
+
+class BeepOnsetsRead(BaseModel):
+    """대역통과 기반 비프음 onset 검출 결과 + 자체 정합성 검증 통계.
+
+    라벨로 저장되지 않는 표시 전용 결과 — 화면에서 바로 확인하고
+    끝나는 진단용 데이터다.
+    """
+
+    count: int
+    onsets_sec: list[float]
+    offsets_sec: list[float]
+    offset_median_sec: float | None
+    offset_stddev_sec: float
+    gaps_sec: list[float]
+
+
 class LabelUpdate(BaseModel):
     """개별 세그먼트 라벨 수정 요청 (06_API.md §8 — 예외 보정용).
 

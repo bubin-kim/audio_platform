@@ -2,12 +2,18 @@
 
 import { useEffect, useState } from "react";
 
+import { SourceBandSpectrogram } from "@/components/datasets/SourceBandSpectrogram";
 import { Spectrogram } from "@/components/datasets/Spectrogram";
 import { SourceWaveform } from "@/components/datasets/SourceWaveform";
 import { Card } from "@/components/ui/Card";
 import { listDatasetSources } from "@/lib/api";
 import { formatDuration } from "@/lib/format";
 import type { SourceRead, SpectrogramMode } from "@/lib/types";
+
+/** 기존 두 스펙트로그램 모드에 신규 "비프 대역 분석" 탭을 더한 뷰 선택.
+ * SpectrogramMode 자체는 건드리지 않는다(기존 컴포넌트 계약 보존) — 이 파일
+ * 안에서만 쓰는 뷰 선택용 타입을 하나 더 둔다. */
+type SourceView = SpectrogramMode | "band_beep";
 
 /**
  * 원본 파일 섹션 (docs/16) — 파일명·업로더·길이 + 행 펼치면 통 음원 스펙트로그램.
@@ -75,7 +81,7 @@ function SourceRow({
   open: boolean;
   onToggle: () => void;
 }) {
-  const [mode, setMode] = useState<SpectrogramMode>("absolute");
+  const [view, setView] = useState<SourceView>("absolute");
 
   return (
     <>
@@ -106,14 +112,15 @@ function SourceRow({
                 [
                   ["absolute", "실제 크기"],
                   ["contrast", "배경 제거 (묻힌 소리 찾기)"],
+                  ["band_beep", "비프 대역 (1.5~2.5k)"],
                 ] as const
               ).map(([value, label]) => (
                 <button
                   key={value}
                   type="button"
-                  onClick={() => setMode(value)}
+                  onClick={() => setView(value)}
                   className={`rounded-full border px-2.5 py-1 transition-colors ${
-                    mode === value
+                    view === value
                       ? "border-accent bg-accent-soft text-accent"
                       : "border-border bg-surface-card text-content-muted hover:bg-surface-muted"
                   }`}
@@ -128,19 +135,32 @@ function SourceRow({
               </p>
               <SourceWaveform sourceId={source.id} width={760} height={120} />
             </div>
-            <Spectrogram
-              kind="source"
-              id={source.id}
-              width={760}
-              height={140}
-              mode={mode}
-              showAxis
-            />
-            <p className="mt-1 text-xs text-content-subtle">
-              세로=주파수(아래가 저음) · 가로=시간 · 밝을수록 큰 소리.
-              {mode === "contrast" &&
-                " 각 주파수의 평소 수준을 뺀 값이라, 환경음에 묻힌 소리도 밝게 드러납니다."}
-            </p>
+            {view === "band_beep" ? (
+              <>
+                <SourceBandSpectrogram sourceId={source.id} width={760} height={160} />
+                <p className="mt-1 text-xs text-content-subtle">
+                  세로=주파수(1500~2500Hz만 확대, 위가 고음) · 가로=시간 ·
+                  점선=1900/2100Hz · 빨간 세로선=대역통과 검출기가 찾은 비프음
+                  onset(신규, 표시 전용 — 라벨로 저장되지 않습니다).
+                </p>
+              </>
+            ) : (
+              <>
+                <Spectrogram
+                  kind="source"
+                  id={source.id}
+                  width={760}
+                  height={140}
+                  mode={view}
+                  showAxis
+                />
+                <p className="mt-1 text-xs text-content-subtle">
+                  세로=주파수(아래가 저음) · 가로=시간 · 밝을수록 큰 소리.
+                  {view === "contrast" &&
+                    " 각 주파수의 평소 수준을 뺀 값이라, 환경음에 묻힌 소리도 밝게 드러납니다."}
+                </p>
+              </>
+            )}
           </td>
         </tr>
       )}

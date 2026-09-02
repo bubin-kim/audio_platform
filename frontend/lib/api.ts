@@ -6,6 +6,8 @@
 
 import { getClientToken } from "@/lib/auth";
 import type {
+  BandSpectrogram,
+  BeepOnsets,
   Dataset,
   DatasetCreate,
   Job,
@@ -219,6 +221,36 @@ export const getSourceWaveform = (sourceFileId: number, bins = 1200) =>
 
 export const listDatasetSources = (datasetId: number) =>
   request<Page<SourceRead>>(`/datasets/${datasetId}/sources`);
+
+/** 주파수 크롭 스펙트로그램(신규, 표시 전용). 파일 불변 → 브라우저 캐시 허용. */
+export const getSourceBandSpectrogram = (
+  sourceFileId: number,
+  fmin = 1500,
+  fmax = 2500,
+) =>
+  request<BandSpectrogram>(
+    `/source-files/${sourceFileId}/band-spectrogram${qs({ fmin, fmax })}`,
+    { cache: "force-cache" },
+  );
+
+/** 대역통과 기반 비프음 onset 검출(신규, 표시 전용) — 결과는 라벨로 저장되지 않는다. */
+export const getSourceBeepOnsets = (
+  sourceFileId: number,
+  params?: {
+    bandLowHz?: number;
+    bandHighHz?: number;
+    k?: number;
+    minGapSec?: number;
+  },
+) =>
+  request<BeepOnsets>(
+    `/source-files/${sourceFileId}/beep-onsets${qs({
+      band_low_hz: params?.bandLowHz,
+      band_high_hz: params?.bandHighHz,
+      k: params?.k,
+      min_gap_sec: params?.minGapSec,
+    })}`,
+  );
 
 // --- Upload ---
 export const uploadFiles = (

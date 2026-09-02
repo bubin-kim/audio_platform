@@ -19,7 +19,12 @@ from app.api.deps import get_db, get_storage_dep
 from app.core.config import get_settings
 from app.core.exceptions import PayloadTooLargeError
 from app.schemas.common import Page
-from app.schemas.segment import SpectrogramRead, WaveformRead
+from app.schemas.segment import (
+    BandSpectrogramRead,
+    BeepOnsetsRead,
+    SpectrogramRead,
+    WaveformRead,
+)
 from app.schemas.upload import SourceRead, UploadResult
 from app.services.dataset_service import DatasetService
 from app.services.upload_service import UploadedFile, UploadService
@@ -139,3 +144,52 @@ def get_source_waveform(
     # 원본 파일은 불변 → 캐시 허용 (세그먼트 파형과 동일 정책)
     response.headers["Cache-Control"] = "private, max-age=3600"
     return WaveformRead(segment_id=source_file_id, duration_sec=duration, peaks=peaks)
+
+
+@router.get(
+    "/source-files/{source_file_id}/band-spectrogram",
+    response_model=BandSpectrogramRead,
+    summary="원본 통 음원 주파수 크롭 스펙트로그램 (신규, 표시 전용 — 좁은 대역 확대)",
+)
+def get_source_band_spectrogram(
+    source_file_id: int,
+    response: Response,
+    fmin: float = Query(1500.0, ge=0, description="크롭할 하한 주파수(Hz)"),
+    fmax: float = Query(2500.0, gt=0, description="크롭할 상한 주파수(Hz)"),
+    db: Session = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage_dep),
+) -> BandSpectrogramRead:
+    spec = UploadService(db, storage).source_band_spectrogram(
+        source_file_id, fmin=fmin, fmax=fmax
+    )
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    return BandSpectrogramRead(
+        duration_sec=spec.duration_sec, sample_rate=spec.sample_rate,
+        freq_bins=spec.freq_bins, cols=spec.cols, fmin=spec.fmin, fmax=spec.fmax,
+        top_db=spec.top_db, data=spec.data_b64,
+    )
+
+
+@router.get(
+    "/source-files/{source_file_id}/beep-onsets",
+    response_model=BeepOnsetsRead,
+    summary="원본 통 음원 대역통과 기반 비프음 onset 검출 (신규, 표시 전용)",
+)
+def get_source_beep_onsets(
+    source_file_id: int,
+    response: Response,
+    band_low_hz: float | None = Query(None, description="대역통과 하한(Hz), 생략 시 기본값"),
+    band_high_hz: float | None = Query(None, description="대역통과 상한(Hz), 생략 시 기본값"),
+    k: float | None = Query(None, gt=0, description="지역 적응형 임계값 배수(median+k*MAD), 생략 시 기본값"),
+    k_global: float | None = Query(None, ge=0, description="전역 하한 배수(경계 오탐 방어), 0이면 끔. 생략 시 기본값"),
+    min_gap_sec: float | None = Query(None, gt=0, description="피크 간 최소 간격(초), 생략 시 기본값"),
+    db: Session = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage_dep),
+) -> BeepOnsetsRead:
+    summary = UploadService(db, storage).source_beep_onsets(
+        source_file_id,
+        band_low_hz=band_low_hz, band_high_hz=band_high_hz,
+        k=k, k_global=k_global, min_gap_sec=min_gap_sec,
+    )
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    return BeepOnsetsRead(**summary)

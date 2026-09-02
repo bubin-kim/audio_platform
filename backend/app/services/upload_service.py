@@ -9,8 +9,11 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from app.audio.band_beep_detector import detect_beep_onsets
+from app.audio.band_spectrogram import BandSpectrogramData, crop_band_spectrogram
 from app.audio.metadata import extract_metadata
 from app.audio.spectrogram import SpectrogramData, mel_spectrogram
+from app.audio.verify_onsets import summarize_onsets
 from app.audio.waveform import waveform_peaks
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.hooks.events import on_upload_complete
@@ -104,6 +107,54 @@ class UploadService:
         return mel_spectrogram(
             self.storage.local_path(source.storage_path), max_cols=max_cols, mode=mode
         )
+
+    def source_band_spectrogram(
+        self,
+        source_id: int,
+        *,
+        fmin: float = 1500.0,
+        fmax: float = 2500.0,
+        max_cols: int = 800,
+    ) -> BandSpectrogramData:
+        """원본 통 음원의 주파수 크롭 스펙트로그램(신규, 표시 전용).
+
+        mel_spectrogram과 별개 계산 경로 — 기존 스펙트로그램 API·로직은
+        전혀 건드리지 않는다.
+        """
+        source = self.source_repo.get(source_id)
+        if source is None:
+            raise NotFoundError(f"SourceFile {source_id}를 찾을 수 없습니다.")
+        return crop_band_spectrogram(
+            self.storage.local_path(source.storage_path),
+            fmin=fmin, fmax=fmax, max_cols=max_cols,
+        )
+
+    def source_beep_onsets(
+        self,
+        source_id: int,
+        *,
+        band_low_hz: float | None = None,
+        band_high_hz: float | None = None,
+        k: float | None = None,
+        k_global: float | None = None,
+        min_gap_sec: float | None = None,
+    ) -> dict:
+        """원본 통 음원의 대역통과 기반 비프음 onset 검출 + 검증 통계(신규, 표시 전용).
+
+        결과는 라벨로 저장되지 않는다 — 화면 확인용.
+        """
+        source = self.source_repo.get(source_id)
+        if source is None:
+            raise NotFoundError(f"SourceFile {source_id}를 찾을 수 없습니다.")
+        params = {
+            "band_low_hz": band_low_hz,
+            "band_high_hz": band_high_hz,
+            "k": k,
+            "k_global": k_global,
+            "min_gap_sec": min_gap_sec,
+        }
+        onsets = detect_beep_onsets(self.storage.local_path(source.storage_path), params)
+        return summarize_onsets(onsets)
 
     def _resolve_dataset(
         self, project_id: int, dataset_id: int | None

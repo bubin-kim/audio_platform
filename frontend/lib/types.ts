@@ -112,6 +112,30 @@ export interface Spectrogram {
   data: string;
 }
 
+/** 주파수 크롭 스펙트로그램(신규, 표시 전용) — 선형 STFT, 좁은 대역만 확대.
+ * data는 uint8(0~255) freq_bins×cols base64, 행 0=fmin. dB는 top_db 기준 상대값. */
+export interface BandSpectrogram {
+  duration_sec: number;
+  sample_rate: number;
+  freq_bins: number;
+  cols: number;
+  fmin: number;
+  fmax: number;
+  top_db: number;
+  data: string;
+}
+
+/** 대역통과 기반 비프음 onset 검출 결과(신규, 표시 전용) — 라벨로 저장되지 않는다.
+ * offsets_sec = onset % 10초 — 녹음 설계상 전부 비슷한 값에 모여야 검출이 맞은 것. */
+export interface BeepOnsets {
+  count: number;
+  onsets_sec: number[];
+  offsets_sec: number[];
+  offset_median_sec: number | null;
+  offset_stddev_sec: number;
+  gaps_sec: number[];
+}
+
 // --- Upload ---
 
 export interface SourceRead {
