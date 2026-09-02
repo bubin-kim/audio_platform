@@ -131,7 +131,8 @@ function SourceRow({
             </div>
             <div className="mb-3">
               <p className="mb-1 text-xs text-content-subtle">
-                전체 파형 — 세로=진폭, 가로=시간. ▲는 평균보다 크게 튄 지점(후보)
+                전체 파형 — 세로=진폭, 가로=시간. ▲는 대역통과 검출기가 찾은
+                비프음 위치(비프 대역 탭의 빨간 세로선과 같은 지점)
               </p>
               <SourceWaveform sourceId={source.id} width={760} height={120} />
             </div>

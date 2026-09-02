@@ -78,11 +78,18 @@ def test_no_boundary_false_positives(tmp_path: Path) -> None:
 
 
 def test_k_global_zero_disables_floor(tmp_path: Path) -> None:
-    """k_global=0이면 전역 하한이 꺼져 예전(지역 전용) 동작으로 돌아간다."""
+    """k_global=0이면 전역 하한이 꺼져 경계 오탐이 다시 나타난다.
+
+    단, 순음성 필터(tonality_db)가 켜져 있으면 그 오탐을 대신 걸러주므로
+    두 방어를 모두 꺼야 차이가 드러난다 — 두 필터가 독립적으로 동작함을
+    함께 확인하는 테스트다.
+    """
     wav = _make_file(tmp_path, ONSET_TIMES)
-    with_floor = detect_beep_onsets(wav, {})
-    without_floor = detect_beep_onsets(wav, {"k_global": 0})
-    assert len(without_floor) > len(with_floor)
+    both_off = detect_beep_onsets(wav, {"k_global": 0, "tonality_db": 0})
+    floor_only = detect_beep_onsets(wav, {"tonality_db": 0})
+    assert len(both_off) > len(floor_only), (
+        f"전역 하한이 경계 오탐을 못 막았다: {both_off} vs {floor_only}"
+    )
 
 
 def test_offset_consistency_via_summary(tmp_path: Path) -> None:
@@ -121,6 +128,7 @@ def test_min_gap_prevents_split_peaks(tmp_path: Path) -> None:
         ({"band_low_hz": 2000, "band_high_hz": 1900}, "band_low_hz"),
         ({"k": 0}, "k"),
         ({"k_global": -1}, "k_global"),
+        ({"tonality_win_sec": 0}, "tonality_win_sec"),
         ({"min_gap_sec": -1}, "min_gap_sec"),
         ({"local_window_sec": 0}, "local_window_sec"),
         ({"smooth_ms": -5}, "smooth_ms"),
@@ -139,7 +147,40 @@ def test_defaults_have_no_domain_branching() -> None:
         "band_high_hz",
         "k",
         "k_global",
+        "tonality_db",
+        "tonality_win_sec",
         "min_gap_sec",
         "local_window_sec",
         "smooth_ms",
     }
+
+
+def test_tonality_filter_rejects_broadband(tmp_path: Path) -> None:
+    """광대역 소리(문 닫힘 같은 충격음)는 순음성 필터에 걸러진다.
+
+    실제 주차장 녹음에서 엔벨로프만으로는 문 닫힘·차량 통과가 대역 안
+    에너지를 튀게 해 오탐이 됐다(NAS 실데이터 100초에서 오탐 10개).
+    좁은 대역 순음인지 스펙트럼으로 확인해 걸러낸다.
+    """
+    n = int(20.0 * SR)
+    t = np.arange(n) / SR
+    rng = np.random.default_rng(3)
+    sos_lp = signal.butter(4, 500, btype="lowpass", fs=SR, output="sos")
+    y = (signal.sosfilt(sos_lp, rng.normal(0, 1.0, n)) * 0.3).astype(np.float64)
+
+    # 5초: 진짜 비프음(2000Hz 순음)
+    m = (t >= 5.0) & (t < 5.2)
+    y[m] += 0.3 * np.sin(2 * np.pi * 2000 * t[m])
+    # 12초: 광대역 충격음(모든 주파수에 에너지 — 대역 안에서도 튄다)
+    m2 = (t >= 12.0) & (t < 12.05)
+    y[m2] += rng.normal(0, 1.5, m2.sum())
+
+    y = (y / np.max(np.abs(y))).astype(np.float32)
+    path = tmp_path / "broadband.wav"
+    sf.write(str(path), y, SR, subtype="PCM_16")
+
+    onsets = detect_beep_onsets(path, {})
+    assert any(abs(o - 5.0) < 0.5 for o in onsets), f"진짜 비프음을 놓침: {onsets}"
+    assert not any(abs(o - 12.0) < 0.5 for o in onsets), (
+        f"광대역 충격음이 걸러지지 않음: {onsets}"
+    )

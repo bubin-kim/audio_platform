@@ -19,7 +19,10 @@
 6. 전역 하한 결합: max(지역임계값, 전역median + k_global*전역MAD)
    ← 파일 경계에서 지역 통계가 무너지는 것 방어 (실측 근거는 DEFAULTS 주석)
 7. find_peaks(envelope, height=임계값(배열), distance=min_gap_sec)
-8. 피크 위치를 초 단위(소수점 3자리)로 반환
+8. **순음성 필터**: 후보마다 스펙트럼을 보고 대역 안 최대 파워가 대역
+   밖 평균보다 tonality_db 이상 큰 것만 남긴다 ← 광대역 소리(문 닫힘·
+   차량 통과) 제거. 실데이터에서 오탐 10개를 전부 걸러냈다(DEFAULTS 주석)
+9. 피크 위치를 초 단위(소수점 3자리)로 반환
 ```
 
 도메인 값(대역·k·min_gap 등)은 전부 함수 인자 기본값으로만 둔다(P1) —
@@ -54,6 +57,22 @@ DEFAULTS: dict[str, Any] = {
     # k_global=8은 실측으로 정했다 — 합성 100초(onset 10개)에서 경계
     # 오탐 2개만 정확히 제거, 실제 NAS 세그먼트 3개에서도 진짜 1개씩만.
     "k_global": 8.0,
+    # 순음성(tonality) 필터 — 후보 지점의 스펙트럼을 보고 "좁은 대역에
+    # 몰린 순음인가"를 확인해 통과시킨다. 엔벨로프 크기만 보면 실제
+    # 주차장 환경의 광대역 소리(문 닫힘·차량 통과·반향)도 대역 안에서
+    # 에너지가 튀어 오탐이 된다.
+    #
+    # 실측 근거(NAS 실데이터 260818_001.WAV, 100초): 엔벨로프 검출만으로
+    # 20개가 나왔는데 진짜 10 + 오탐 10이었다. 두 무리를 스펙트럼으로
+    # 재보니 완전히 갈렸다 —
+    #   진짜: 피크가 **전부 1992Hz**, 대역/대역밖 비 14.9~19.3dB
+    #   오탐: 피크 1922~2086Hz로 흩어짐, 비 2.0~11.8dB
+    # 실제 구현으로 임계값을 스윕한 결과 **14dB**에서 실데이터 진짜
+    # 10/10·오탐 0, 합성 100초도 10개 유지. 12~13은 오탐이 1~2개 남고,
+    # 16부터는 진짜를 놓치기 시작한다(9/10).
+    "tonality_db": 14.0,
+    # 순음성을 잴 창 길이(초) — 비프음 길이(100~300ms)에 맞춘다.
+    "tonality_win_sec": 0.15,
     "min_gap_sec": 2.0,
     "local_window_sec": 2.0,
     "smooth_ms": 20.0,
@@ -76,6 +95,8 @@ def validate_params(params: dict[str, Any]) -> None:
         raise ValueError("k는 양수여야 합니다.")
     if float(_param(params, "k_global")) < 0:
         raise ValueError("k_global은 0 이상이어야 합니다(0이면 전역 하한을 끈다).")
+    if float(_param(params, "tonality_win_sec")) <= 0:
+        raise ValueError("tonality_win_sec는 양수여야 합니다.")
     if float(_param(params, "min_gap_sec")) <= 0:
         raise ValueError("min_gap_sec는 양수여야 합니다.")
     if float(_param(params, "local_window_sec")) <= 0:
@@ -104,6 +125,34 @@ def _local_median_mad(x: np.ndarray, half_win: int) -> tuple[np.ndarray, np.ndar
     median = ndimage.median_filter(x, size=size, mode="nearest")
     mad = ndimage.median_filter(np.abs(x - median), size=size, mode="nearest")
     return median, mad
+
+
+def _tonality_db(
+    mono: np.ndarray, sr: int, center_sec: float, lo: float, hi: float, win_sec: float
+) -> float:
+    """이 지점이 '좁은 대역의 순음'인 정도 — 대역 최대 파워 / 대역 밖 평균 파워(dB).
+
+    비프음처럼 한 주파수에 에너지가 몰린 소리는 이 값이 크고, 문 닫힘·
+    차량 통과 같은 광대역 소리는 대역 밖에도 에너지가 퍼져 있어 작다.
+    대역 밖은 저역(300~1500Hz)과 고역(2600~6000Hz)을 쓴다 — 타겟 대역
+    바로 옆은 필터 스커트 영향이 있어 띄운다.
+    """
+    half = int(win_sec * sr / 2)
+    a, b = max(0, int(center_sec * sr) - half), min(len(mono), int(center_sec * sr) + half)
+    seg = mono[a:b]
+    if seg.size < 256:
+        return 0.0
+
+    nperseg = min(2048, seg.size)
+    freqs, power = sig.welch(seg, sr, nperseg=nperseg)
+    in_band = (freqs >= lo) & (freqs <= hi)
+    out_band = ((freqs >= 300) & (freqs <= 1500)) | ((freqs >= 2600) & (freqs <= 6000))
+    if not in_band.any() or not out_band.any():
+        return 0.0
+
+    return float(
+        10 * np.log10(power[in_band].max() / max(float(power[out_band].mean()), 1e-20))
+    )
 
 
 def detect_beep_onsets(path: Path, params: dict[str, Any] | None = None) -> list[float]:
@@ -156,5 +205,16 @@ def detect_beep_onsets(path: Path, params: dict[str, Any] | None = None) -> list
     distance = max(1, int(round(sr * min_gap_sec)))
 
     peaks, _ = sig.find_peaks(envelope, height=threshold, distance=distance)
+
+    # 순음성 필터 — 엔벨로프만으로는 광대역 소리(문 닫힘·차량 통과)가
+    # 걸러지지 않는다. 후보마다 스펙트럼을 보고 좁은 대역 순음인지 확인.
+    tonality_db = float(_param(params, "tonality_db"))
+    if tonality_db > 0:
+        win_sec = float(_param(params, "tonality_win_sec"))
+        peaks = [
+            p
+            for p in peaks
+            if _tonality_db(mono, sr, p / sr, lo, hi, win_sec) >= tonality_db
+        ]
 
     return [round(float(p / sr), 3) for p in peaks]

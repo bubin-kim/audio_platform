@@ -2,31 +2,33 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { getSourceWaveform } from "@/lib/api";
-import type { Waveform } from "@/lib/types";
+import { getSourceBeepOnsets, getSourceWaveform } from "@/lib/api";
+import type { BeepOnsets, Waveform } from "@/lib/types";
 
 /**
  * 원본 전체 파형 (docs/16) — 3분 원본을 통째로 보고 이벤트 위치를 눈으로 찾는 용도.
  * 세그먼트 미니 파형(60칸)과 달리 1200칸으로 촘촘히 그린다.
  *
- * 피크 표시: 평균 + k×표준편차를 넘는 지점에 표식을 찍는다(사용자 요청).
- * 자동 검출이 완벽하지 않으므로 "후보"일 뿐이며, 최종 판단은 사람이 한다.
+ * 피크 표시(2026-08-28 변경): 예전에는 이 컴포넌트가 전대역 파형에서
+ * "평균+2.5σ"로 직접 계산했는데, 저역 소음(엔진·환기팬·음악)에 반응해
+ * 문 닫힘·차량 통과 같은 광대역 충격음만 찍히고 정작 비프음은 놓쳤다.
+ * 이제 대역통과 검출기(band_beep_detector)의 결과를 그대로 쓴다 —
+ * 파형과 비프 대역 탭이 **같은 지점**을 가리키게 된다.
  */
 export function SourceWaveform({
   sourceId,
   width = 760,
   height = 120,
   showPeaks = true,
-  peakSigma = 2.5,
 }: {
   sourceId: number;
   width?: number;
   height?: number;
   showPeaks?: boolean;
-  peakSigma?: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [wave, setWave] = useState<Waveform | null>(null);
+  const [onsets, setOnsets] = useState<BeepOnsets | null>(null);
   const [failed, setFailed] = useState(false);
   const [hover, setHover] = useState<{ x: number; t: number } | null>(null);
 
@@ -40,38 +42,27 @@ export function SourceWaveform({
     };
   }, [sourceId]);
 
-  /** 평균 초과 피크 후보 — 인접한 것은 하나로 묶는다. */
+  useEffect(() => {
+    if (!showPeaks) return;
+    let cancelled = false;
+    // 검출 실패는 파형 표시 자체를 막지 않는다 — 표식만 안 뜬다.
+    getSourceBeepOnsets(sourceId)
+      .then((o) => !cancelled && setOnsets(o))
+      .catch(() => !cancelled && setOnsets(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceId, showPeaks]);
+
+  /** 검출된 비프음 위치 → 파형 칸 인덱스로 변환. */
   const peaks = useMemo(() => {
-    if (!wave || !showPeaks) return [];
-    const p = wave.peaks;
-    const mean = p.reduce((a, b) => a + b, 0) / p.length;
-    const sd = Math.sqrt(
-      p.reduce((a, b) => a + (b - mean) ** 2, 0) / p.length,
-    );
-    const th = mean + peakSigma * sd;
-    const found: { index: number; value: number }[] = [];
-    let runStart = -1;
-    let runBest = { index: -1, value: -1 };
-    for (let i = 0; i < p.length; i++) {
-      if (p[i] > th) {
-        if (runStart < 0) {
-          runStart = i;
-          runBest = { index: i, value: p[i] };
-        } else if (p[i] > runBest.value) {
-          runBest = { index: i, value: p[i] };
-        }
-      } else if (runStart >= 0) {
-        // 인접 병합: 마지막 후보와 가까우면(전체의 1% 이내) 건너뛴다
-        const last = found[found.length - 1];
-        if (!last || runBest.index - last.index > p.length * 0.01) {
-          found.push(runBest);
-        }
-        runStart = -1;
-      }
-    }
-    if (runStart >= 0) found.push(runBest);
-    return found;
-  }, [wave, showPeaks, peakSigma]);
+    if (!wave || !showPeaks || !onsets || wave.duration_sec <= 0) return [];
+    const n = wave.peaks.length;
+    return onsets.onsets_sec.map((sec) => ({
+      index: Math.min(n - 1, Math.round((sec / wave.duration_sec) * n)),
+      sec,
+    }));
+  }, [wave, showPeaks, onsets]);
 
   useEffect(() => {
     if (!wave || !canvasRef.current) return;
@@ -163,9 +154,9 @@ export function SourceWaveform({
       )}
       <div className="mt-1 flex justify-between text-xs text-content-subtle">
         <span>0초</span>
-        {showPeaks && (
+        {showPeaks && onsets !== null && (
           <span className="text-status-warn">
-            ▲ 피크 후보 {peaks.length}곳 (평균+{peakSigma}σ 초과)
+            ▲ 비프음 {peaks.length}곳 (1.8~2.2kHz 대역 검출)
           </span>
         )}
         <span>{wave.duration_sec.toFixed(0)}초</span>
