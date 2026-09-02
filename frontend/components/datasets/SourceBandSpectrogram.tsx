@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { getSourceBandSpectrogram, getSourceBeepOnsets } from "@/lib/api";
+import { formatHz } from "@/lib/mel";
 import type { BandSpectrogram, BeepOnsets } from "@/lib/types";
 import config from "@/tailwind.config";
 
@@ -48,6 +49,18 @@ function buildLut(): Uint8Array {
 const LUT = buildLut();
 
 const GUIDE_LINES_HZ = [1900, 2100];
+
+/** 크롭 대역에 찍을 Hz 눈금. 멜과 달리 **선형**이라 위치 계산이 단순하다.
+ * 200Hz 간격으로 끊되, 대역이 좁으면 100Hz까지 촘촘하게 내려간다. */
+function pickBandTicks(fmin: number, fmax: number): number[] {
+  const span = fmax - fmin;
+  const step = span <= 400 ? 100 : span <= 1200 ? 200 : 500;
+  const ticks: number[] = [];
+  for (let hz = Math.ceil(fmin / step) * step; hz <= fmax; hz += step) {
+    ticks.push(hz);
+  }
+  return ticks;
+}
 
 export function SourceBandSpectrogram({
   sourceId,
@@ -136,41 +149,82 @@ export function SourceBandSpectrogram({
   // 0.08~0.27초, 실패한 파일은 3.7초).
   const consistent = onsets.offset_stddev_sec <= 0.5;
 
+  const ticks = pickBandTicks(spec.fmin, spec.fmax);
+
   return (
     <div className="flex flex-col gap-2">
-      <div className="relative" style={{ width, height }}>
-        <canvas
-          ref={canvasRef}
-          role="img"
-          aria-label={`비프 대역(${Math.round(spec.fmin)}~${Math.round(spec.fmax)}Hz) 스펙트로그램`}
-          title={`비프 대역 · ${spec.duration_sec.toFixed(1)}초 · ${Math.round(spec.fmin)}~${Math.round(spec.fmax)}Hz · top_db ${spec.top_db}`}
-          className="rounded border border-border"
-          style={{ width, height, imageRendering: "auto" }}
-        />
-        {/* 1900/2100Hz 가이드라인 */}
-        <div className="pointer-events-none absolute inset-0">
-          {GUIDE_LINES_HZ.map((hz) => (
-            <div
+      {/* 라벨과 눈금선은 같은 높이 기준(캔버스 height)에 배치한다 —
+          items-stretch를 주면 라벨 영역이 캔버스보다 커져 어긋난다
+          (기존 Spectrogram.tsx에서 실측된 함정, 같은 구조를 따른다). */}
+      <div className="flex items-start gap-1">
+        <div
+          className="relative w-11 shrink-0 text-right text-[10px] leading-none text-content-subtle"
+          style={{ height }}
+          aria-hidden
+        >
+          {ticks.map((hz) => (
+            <span
               key={hz}
-              className="absolute left-0 right-0 border-t border-dashed border-white/40"
-              style={{ top: hzToY(hz) }}
-            />
-          ))}
-          {/* 검출된 onset — 기존 파형의 ▲(status.warn, 주황)와 구분되는
-              status.error(적갈)로 세로선을 그린다. 토큰만 사용(CLAUDE.md §5). */}
-          {onsets.onsets_sec.map((t, i) => (
-            <div
-              key={i}
-              className="absolute top-0 bottom-0 w-px bg-status-error/70"
-              style={{ left: secToX(t) }}
-            />
+              className="absolute right-0 tabular-nums"
+              style={{
+                bottom: `${((hz - spec.fmin) / (spec.fmax - spec.fmin)) * 100}%`,
+                transform: "translateY(50%)",
+              }}
+            >
+              {formatHz(hz)}
+            </span>
           ))}
         </div>
+        <div className="relative" style={{ width, height }}>
+          <canvas
+            ref={canvasRef}
+            role="img"
+            aria-label={`비프 대역(${Math.round(spec.fmin)}~${Math.round(spec.fmax)}Hz) 스펙트로그램`}
+            title={`비프 대역 · ${spec.duration_sec.toFixed(1)}초 · ${Math.round(spec.fmin)}~${Math.round(spec.fmax)}Hz · top_db ${spec.top_db}`}
+            className="rounded border border-border"
+            style={{ width, height, imageRendering: "auto" }}
+          />
+          <div className="pointer-events-none absolute inset-0">
+            {/* Hz 눈금선 — 캔버스 위에 옅게 (recessive) */}
+            {ticks.map((hz) => (
+              <div
+                key={hz}
+                className="absolute left-0 right-0 border-t border-white/20"
+                style={{
+                  bottom: `${((hz - spec.fmin) / (spec.fmax - spec.fmin)) * 100}%`,
+                }}
+              />
+            ))}
+            {/* 1900/2100Hz 가이드라인 — 눈금선보다 진하게 (비프음 대역 표시) */}
+            {GUIDE_LINES_HZ.map((hz) => (
+              <div
+                key={hz}
+                className="absolute left-0 right-0 border-t border-dashed border-white/40"
+                style={{ top: hzToY(hz) }}
+              />
+            ))}
+            {/* 검출된 onset — 기존 파형의 ▲(status.warn, 주황)와 구분되는
+                status.error(적갈)로 세로선을 그린다. 토큰만 사용(CLAUDE.md §5). */}
+            {onsets.onsets_sec.map((t, i) => (
+              <div
+                key={i}
+                className="absolute top-0 bottom-0 w-px bg-status-error/70"
+                style={{ left: secToX(t) }}
+              />
+            ))}
+          </div>
+        </div>
+        <span
+          className="shrink-0 text-[10px] leading-none text-content-subtle"
+          style={{ marginTop: height - 6 }}
+        >
+          Hz
+        </span>
       </div>
 
       <div className="flex justify-between text-xs text-content-subtle">
-        <span>0초</span>
-        <span>1900Hz / 2100Hz 점선</span>
+        <span className="pl-12">0초</span>
+        <span>1900Hz / 2100Hz 점선 = 비프음 대역</span>
         <span>{spec.duration_sec.toFixed(0)}초</span>
       </div>
 
