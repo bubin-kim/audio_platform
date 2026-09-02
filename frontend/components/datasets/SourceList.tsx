@@ -131,10 +131,16 @@ function SourceRow({
             </div>
             <div className="mb-3">
               <p className="mb-1 text-xs text-content-subtle">
-                전체 파형 — 세로=진폭, 가로=시간. ▲는 대역통과 검출기가 찾은
-                비프음 위치(비프 대역 탭의 빨간 세로선과 같은 지점)
+                {view === "band_beep"
+                  ? "대역통과 파형 — 1.8~2.2kHz만 남긴 소리 크기(자동 확대). ▲는 검출된 비프음 위치"
+                  : "전체 파형 — 세로=진폭, 가로=시간. ▲는 대역통과 검출기가 찾은 비프음 위치(비프 대역 탭의 빨간 세로선과 같은 지점)"}
               </p>
-              <SourceWaveform sourceId={source.id} width={760} height={120} />
+              <SourceWaveform
+                sourceId={source.id}
+                width={760}
+                height={120}
+                band={view === "band_beep"}
+              />
             </div>
             {view === "band_beep" ? (
               <>

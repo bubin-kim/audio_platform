@@ -125,6 +125,17 @@ export interface BandSpectrogram {
   data: string;
 }
 
+/** 대역통과 파형(신규, 표시 전용 — 비프 대역 탭). 기존 Waveform과 별개 타입.
+ * peaks는 자기 최대값 기준 0..1 정규화라 **파일 간 절대 비교 불가** —
+ * 원래 레벨은 peak_abs로 따로 온다. */
+export interface BandWaveform {
+  duration_sec: number;
+  peaks: number[];
+  peak_abs: number;
+  band_low_hz: number;
+  band_high_hz: number;
+}
+
 /** 대역통과 기반 비프음 onset 검출 결과(신규, 표시 전용) — 라벨로 저장되지 않는다.
  * offsets_sec = onset % 10초 — 녹음 설계상 전부 비슷한 값에 모여야 검출이 맞은 것. */
 export interface BeepOnsets {

@@ -21,6 +21,7 @@ from app.core.exceptions import PayloadTooLargeError
 from app.schemas.common import Page
 from app.schemas.segment import (
     BandSpectrogramRead,
+    BandWaveformRead,
     BeepOnsetsRead,
     SpectrogramRead,
     WaveformRead,
@@ -144,6 +145,30 @@ def get_source_waveform(
     # 원본 파일은 불변 → 캐시 허용 (세그먼트 파형과 동일 정책)
     response.headers["Cache-Control"] = "private, max-age=3600"
     return WaveformRead(segment_id=source_file_id, duration_sec=duration, peaks=peaks)
+
+
+@router.get(
+    "/source-files/{source_file_id}/band-waveform",
+    response_model=BandWaveformRead,
+    summary="원본 대역통과 파형 (신규, 표시 전용 — 비프 대역만 남긴 엔벨로프)",
+)
+def get_source_band_waveform(
+    source_file_id: int,
+    response: Response,
+    bins: int = Query(1200, gt=0, le=4000, description="가로 칸 수"),
+    band_low_hz: float = Query(1800.0, gt=0, description="대역통과 하한(Hz)"),
+    band_high_hz: float = Query(2200.0, gt=0, description="대역통과 상한(Hz)"),
+    db: Session = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage_dep),
+) -> BandWaveformRead:
+    duration, peaks, peak_abs = UploadService(db, storage).source_band_waveform(
+        source_file_id, bins=bins, band_low_hz=band_low_hz, band_high_hz=band_high_hz
+    )
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    return BandWaveformRead(
+        duration_sec=duration, peaks=peaks, peak_abs=peak_abs,
+        band_low_hz=band_low_hz, band_high_hz=band_high_hz,
+    )
 
 
 @router.get(

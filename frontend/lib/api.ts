@@ -7,6 +7,7 @@
 import { getClientToken } from "@/lib/auth";
 import type {
   BandSpectrogram,
+  BandWaveform,
   BeepOnsets,
   Dataset,
   DatasetCreate,
@@ -221,6 +222,22 @@ export const getSourceWaveform = (sourceFileId: number, bins = 1200) =>
 
 export const listDatasetSources = (datasetId: number) =>
   request<Page<SourceRead>>(`/datasets/${datasetId}/sources`);
+
+/** 대역통과 파형(신규, 표시 전용 — 비프 대역 탭). 파일 불변 → 브라우저 캐시 허용. */
+export const getSourceBandWaveform = (
+  sourceFileId: number,
+  bins = 1200,
+  bandLowHz = 1800,
+  bandHighHz = 2200,
+) =>
+  request<BandWaveform>(
+    `/source-files/${sourceFileId}/band-waveform${qs({
+      bins,
+      band_low_hz: bandLowHz,
+      band_high_hz: bandHighHz,
+    })}`,
+    { cache: "force-cache" },
+  );
 
 /** 주파수 크롭 스펙트로그램(신규, 표시 전용). 파일 불변 → 브라우저 캐시 허용. */
 export const getSourceBandSpectrogram = (

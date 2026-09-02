@@ -67,6 +67,21 @@ class BeepOnsetsRead(BaseModel):
     gaps_sec: list[float]
 
 
+class BandWaveformRead(BaseModel):
+    """대역통과 파형 (docs/16 §7 추가8 — 비프 대역 탭 전용, 표시 전용).
+
+    기존 WaveformRead(전대역 절대 스케일)와 **별개 스키마**다. peaks는
+    자기 최대값 기준 0~1 정규화라 파일 간 절대 비교에는 쓸 수 없고,
+    원래 레벨은 peak_abs로 따로 싣는다.
+    """
+
+    duration_sec: float
+    peaks: list[float]
+    peak_abs: float
+    band_low_hz: float
+    band_high_hz: float
+
+
 class LabelUpdate(BaseModel):
     """개별 세그먼트 라벨 수정 요청 (06_API.md §8 — 예외 보정용).
 

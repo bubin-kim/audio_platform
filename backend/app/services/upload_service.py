@@ -14,6 +14,11 @@ from app.audio.band_spectrogram import BandSpectrogramData, crop_band_spectrogra
 from app.audio.metadata import extract_metadata
 from app.audio.spectrogram import SpectrogramData, mel_spectrogram
 from app.audio.verify_onsets import summarize_onsets
+from app.audio.band_waveform import (
+    DEFAULT_BAND_HIGH_HZ,
+    DEFAULT_BAND_LOW_HZ,
+    band_waveform_peaks,
+)
 from app.audio.waveform import waveform_peaks
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.hooks.events import on_upload_complete
@@ -96,6 +101,29 @@ class UploadService:
             raise NotFoundError(f"SourceFile {source_id}를 찾을 수 없습니다.")
         peaks = waveform_peaks(self.storage.local_path(source.storage_path), bins=bins)
         return source.duration_sec or 0.0, peaks
+
+    def source_band_waveform(
+        self,
+        source_id: int,
+        *,
+        bins: int = 1200,
+        band_low_hz: float = DEFAULT_BAND_LOW_HZ,
+        band_high_hz: float = DEFAULT_BAND_HIGH_HZ,
+    ) -> tuple[float, list[float], float]:
+        """원본의 대역통과 파형(신규, 표시 전용) — (duration, peaks, peak_abs).
+
+        기존 `source_waveform`(전대역 절대 스케일)과 **별개 경로**다. 기존
+        파형 API·계산은 전혀 건드리지 않는다.
+        """
+        source = self.source_repo.get(source_id)
+        if source is None:
+            raise NotFoundError(f"SourceFile {source_id}를 찾을 수 없습니다.")
+        return band_waveform_peaks(
+            self.storage.local_path(source.storage_path),
+            bins=bins,
+            band_low_hz=band_low_hz,
+            band_high_hz=band_high_hz,
+        )
 
     def source_spectrogram(
         self, source_id: int, *, max_cols: int = 800, mode: str = "absolute"

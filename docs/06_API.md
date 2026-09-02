@@ -211,6 +211,29 @@ Dataset의 모든 Segment를 CSV로 생성. 큰 데이터셋 대비 **Job으로 
 { "duration_sec": 184.1, "sample_rate": 48000, "n_mels": 96, "cols": 800,
   "fmax": 24000, "db_floor": -80.0, "db_ceil": 0.0, "data": "<base64>" }
 ```
+
+### 4.6b 비프 대역 표시 전용 API (docs/16 §7 — 신규, 라벨 저장 안 함)
+
+기존 파형·스펙트로그램 API와 **별개 경로**다. 결과는 화면 표시용이며
+커팅·라벨에 쓰이지 않는다.
+
+| 엔드포인트 | 설명 |
+|---|---|
+| `GET /api/source-files/{id}/band-spectrogram?fmin=&fmax=` | 주파수 크롭 스펙트로그램(선형 STFT, 기본 1500~2500Hz) |
+| `GET /api/source-files/{id}/beep-onsets?...` | 대역통과 비프음 onset 검출 + 정합성 통계 |
+| `GET /api/source-files/{id}/band-waveform?bins=&band_low_hz=&band_high_hz=` | **대역통과 파형**(기본 1800~2200Hz 엔벨로프) |
+
+**응답 200 `BandWaveformRead`**
+```json
+{ "duration_sec": 100.5, "peaks": [0.0, 0.31, 1.0, ...], "peak_abs": 0.000713,
+  "band_low_hz": 1800.0, "band_high_hz": 2200.0 }
+```
+
+> `peaks`는 **자기 최대값 기준 0~1 정규화**다 — 파일 간 절대 크기 비교에
+> 쓰면 안 된다. 원래 레벨은 `peak_abs`로 따로 온다. 절대 비교가 필요하면
+> 기존 `GET /api/source-files/{id}/waveform`(전대역 절대 스케일)을 쓴다.
+> 정규화하는 이유: 본수집 녹음이 -63dBFS로 낮아 절대 스케일로는 1200칸 중
+> 98.7%가 0.5px 미만으로 뭉개진다(실측, docs/16 §7 추가8).
 - `data`: uint8(0~100) `n_mels×cols` 행렬의 base64 (row-major, 행 0=최저음).
   `db_floor`~`db_ceil`이 이 파일의 실제 표시 범위 — 고정 -80~0을 쓰면 분포가 좁은
   녹음에서 대비가 죽어 묻힌 이벤트가 안 보인다(실측: 260804_005는 -52.5~13.8).

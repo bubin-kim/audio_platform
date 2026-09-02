@@ -2,7 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { getSourceBeepOnsets, getSourceWaveform } from "@/lib/api";
+import {
+  getSourceBandWaveform,
+  getSourceBeepOnsets,
+  getSourceWaveform,
+} from "@/lib/api";
 import type { BeepOnsets, Waveform } from "@/lib/types";
 
 /**
@@ -14,33 +18,55 @@ import type { BeepOnsets, Waveform } from "@/lib/types";
  * 문 닫힘·차량 통과 같은 광대역 충격음만 찍히고 정작 비프음은 놓쳤다.
  * 이제 대역통과 검출기(band_beep_detector)의 결과를 그대로 쓴다 —
  * 파형과 비프 대역 탭이 **같은 지점**을 가리키게 된다.
+ *
+ * band 모드(2026-09-01 추가, docs/16 §7 추가8): `band`가 true면 전대역
+ * 대신 **대역통과 파형**(1.8~2.2kHz 엔벨로프, 정규화)을 그린다. 비프 대역
+ * 탭에서만 켜서 위(파형)·아래(스펙트로그램)·▲가 같은 대역을 가리키게
+ * 한다. **기본값 false — 기존 두 탭의 표시는 이전과 100% 동일하다.**
  */
 export function SourceWaveform({
   sourceId,
   width = 760,
   height = 120,
   showPeaks = true,
+  band = false,
 }: {
   sourceId: number;
   width?: number;
   height?: number;
   showPeaks?: boolean;
+  /** true면 대역통과 파형(정규화). 기본 false = 기존 전대역 절대 스케일. */
+  band?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [wave, setWave] = useState<Waveform | null>(null);
+  const [peakAbs, setPeakAbs] = useState<number | null>(null);
   const [onsets, setOnsets] = useState<BeepOnsets | null>(null);
   const [failed, setFailed] = useState(false);
   const [hover, setHover] = useState<{ x: number; t: number } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    getSourceWaveform(sourceId)
+    setWave(null);
+    setFailed(false);
+    setPeakAbs(null);
+    const load = band
+      ? getSourceBandWaveform(sourceId).then((b) => {
+          if (!cancelled) setPeakAbs(b.peak_abs);
+          return {
+            segment_id: sourceId,
+            duration_sec: b.duration_sec,
+            peaks: b.peaks,
+          } as Waveform;
+        })
+      : getSourceWaveform(sourceId);
+    load
       .then((w) => !cancelled && setWave(w))
       .catch(() => !cancelled && setFailed(true));
     return () => {
       cancelled = true;
     };
-  }, [sourceId]);
+  }, [sourceId, band]);
 
   useEffect(() => {
     if (!showPeaks) return;
@@ -87,8 +113,8 @@ export function SourceWaveform({
     ctx.lineTo(width, mid);
     ctx.stroke();
 
-    // 파형 — 절대 스케일 유지
-    ctx.fillStyle = "#6b93c4";
+    // 파형 — 기존(전대역)은 절대 스케일 유지, band 모드는 정규화값을 그대로 쓴다.
+    ctx.fillStyle = band ? "#3f7f6f" : "#6b93c4";
     for (let i = 0; i < n; i++) {
       const h = Math.max(wave.peaks[i] > 0.004 ? 1 : 0.5, wave.peaks[i] * (height - 4));
       ctx.fillRect(i * barW, mid - h / 2, Math.max(barW * 0.9, 0.5), h);
@@ -114,7 +140,7 @@ export function SourceWaveform({
         ctx.setLineDash([]);
       }
     }
-  }, [wave, peaks, width, height, showPeaks]);
+  }, [wave, peaks, width, height, showPeaks, band]);
 
   if (failed) {
     return <span className="text-xs text-content-subtle">파형 없음</span>;
@@ -134,7 +160,11 @@ export function SourceWaveform({
       <canvas
         ref={canvasRef}
         role="img"
-        aria-label={`원본 전체 파형 (${wave.duration_sec.toFixed(0)}초)`}
+        aria-label={
+          band
+            ? `원본 대역통과 파형 1.8~2.2kHz (${wave.duration_sec.toFixed(0)}초)`
+            : `원본 전체 파형 (${wave.duration_sec.toFixed(0)}초)`
+        }
         className="rounded border border-border"
         style={{ width, height }}
         onMouseMove={(e) => {
@@ -161,6 +191,13 @@ export function SourceWaveform({
         )}
         <span>{wave.duration_sec.toFixed(0)}초</span>
       </div>
+      {band && peakAbs !== null && (
+        <p className="mt-0.5 text-xs text-content-subtle">
+          세로는 이 파일 안에서만 정규화된 값입니다(파일 간 크기 비교 불가).
+          실제 최대 진폭 {peakAbs.toExponential(2)} — 절대 크기는 &quot;실제
+          크기&quot; 탭에서 보세요.
+        </p>
+      )}
     </div>
   );
 }
