@@ -7,6 +7,8 @@ import {
   getSourceBeepOnsets,
   getSourceWaveform,
 } from "@/lib/api";
+import { HZ_AXIS_PX } from "@/components/datasets/SourceBandSpectrogram";
+import { formatHz } from "@/lib/mel";
 import type { BeepOnsets, Waveform } from "@/lib/types";
 
 /**
@@ -41,6 +43,8 @@ export function SourceWaveform({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [wave, setWave] = useState<Waveform | null>(null);
   const [peakAbs, setPeakAbs] = useState<number | null>(null);
+  /** 실제 적용된 대역 — 응답값으로 표시한다(하드코딩하면 파라미터를 바꿨을 때 어긋난다). */
+  const [bandHz, setBandHz] = useState<[number, number] | null>(null);
   const [onsets, setOnsets] = useState<BeepOnsets | null>(null);
   const [failed, setFailed] = useState(false);
   const [hover, setHover] = useState<{ x: number; t: number } | null>(null);
@@ -50,9 +54,13 @@ export function SourceWaveform({
     setWave(null);
     setFailed(false);
     setPeakAbs(null);
+    setBandHz(null);
     const load = band
       ? getSourceBandWaveform(sourceId).then((b) => {
-          if (!cancelled) setPeakAbs(b.peak_abs);
+          if (!cancelled) {
+            setPeakAbs(b.peak_abs);
+            setBandHz([b.band_low_hz, b.band_high_hz]);
+          }
           return {
             segment_id: sourceId,
             duration_sec: b.duration_sec,
@@ -142,6 +150,10 @@ export function SourceWaveform({
     }
   }, [wave, peaks, width, height, showPeaks, band]);
 
+  const bandLabel = bandHz
+    ? `${formatHz(bandHz[0])}~${formatHz(bandHz[1])}Hz`
+    : "1.8k~2.2kHz";
+
   if (failed) {
     return <span className="text-xs text-content-subtle">파형 없음</span>;
   }
@@ -155,14 +167,14 @@ export function SourceWaveform({
     );
   }
 
-  return (
-    <div className="relative" style={{ width }}>
+  const canvas = (
+    <div className="relative" style={{ width, height }}>
       <canvas
         ref={canvasRef}
         role="img"
         aria-label={
           band
-            ? `원본 대역통과 파형 1.8~2.2kHz (${wave.duration_sec.toFixed(0)}초)`
+            ? `원본 대역통과 파형 ${bandLabel} (${wave.duration_sec.toFixed(0)}초)`
             : `원본 전체 파형 (${wave.duration_sec.toFixed(0)}초)`
         }
         className="rounded border border-border"
@@ -182,11 +194,54 @@ export function SourceWaveform({
           {hover.t.toFixed(1)}초
         </div>
       )}
-      <div className="mt-1 flex justify-between text-xs text-content-subtle">
+    </div>
+  );
+
+  return (
+    <div style={{ width: band ? width + HZ_AXIS_PX : width }}>
+      {/* band 모드에서는 아래 스펙트로그램의 Hz 축과 **같은 폭**의 축을 둔다.
+          파형의 세로축은 주파수가 아니라 진폭이므로 Hz 눈금을 찍을 수 없다 —
+          대신 어느 대역을 걸러낸 파형인지를 세로로 적고, 진폭 눈금(정규화
+          0~1, 중앙 기준 ±)을 찍는다. 스펙트로그램과 왼쪽 폭이 같아야
+          두 그림의 시간축이 세로로 맞는다(HZ_AXIS_PX 공유). */}
+      {band ? (
+        <div className="flex items-start gap-1">
+          <div
+            className="relative shrink-0 text-right text-[10px] leading-none text-content-subtle"
+            style={{ width: HZ_AXIS_PX - 4, height }}
+          >
+            <span className="absolute right-0 top-0 tabular-nums">1.0</span>
+            <span
+              className="absolute right-0 tabular-nums"
+              style={{ top: "50%", transform: "translateY(-50%)" }}
+            >
+              0
+            </span>
+            <span className="absolute right-0 bottom-0 tabular-nums">1.0</span>
+            <span
+              className="absolute whitespace-nowrap font-medium text-content-muted"
+              style={{
+                left: "50%",
+                top: "50%",
+                transform: "translate(-50%, -50%) rotate(-90deg)",
+              }}
+            >
+              {bandLabel}
+            </span>
+          </div>
+          {canvas}
+        </div>
+      ) : (
+        canvas
+      )}
+      <div
+        className="mt-1 flex justify-between text-xs text-content-subtle"
+        style={{ marginLeft: band ? HZ_AXIS_PX : 0, width }}
+      >
         <span>0초</span>
         {showPeaks && onsets !== null && (
           <span className="text-status-warn">
-            ▲ 비프음 {peaks.length}곳 (1.8~2.2kHz 대역 검출)
+            ▲ 비프음 {peaks.length}곳 ({bandLabel} 대역 검출)
           </span>
         )}
         <span>{wave.duration_sec.toFixed(0)}초</span>

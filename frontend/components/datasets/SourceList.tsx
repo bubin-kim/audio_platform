@@ -2,10 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import {
-  HZ_AXIS_PX,
-  SourceBandSpectrogram,
-} from "@/components/datasets/SourceBandSpectrogram";
+import { SourceBandSpectrogram } from "@/components/datasets/SourceBandSpectrogram";
 import { Spectrogram } from "@/components/datasets/Spectrogram";
 import { SourceWaveform } from "@/components/datasets/SourceWaveform";
 import { Card } from "@/components/ui/Card";
@@ -138,21 +135,15 @@ function SourceRow({
                   ? "대역통과 파형 — 1.8~2.2kHz만 남긴 소리 크기(자동 확대). ▲는 검출된 비프음 위치"
                   : "전체 파형 — 세로=진폭, 가로=시간. ▲는 대역통과 검출기가 찾은 비프음 위치(비프 대역 탭의 빨간 세로선과 같은 지점)"}
               </p>
-              {/* 비프 대역 탭에서는 아래 스펙트로그램에 Hz 축이 붙으므로,
-                  파형도 같은 만큼 들여써야 시간축이 세로로 맞는다.
-                  값은 스펙트로그램 쪽과 공유한다(따로 두면 어긋난다). */}
-              <div
-                style={
-                  view === "band_beep" ? { paddingLeft: HZ_AXIS_PX } : undefined
-                }
-              >
-                <SourceWaveform
-                  sourceId={source.id}
-                  width={760}
-                  height={120}
-                  band={view === "band_beep"}
-                />
-              </div>
+              {/* band 모드에서는 SourceWaveform이 **자체 축**(대역 표기 +
+                  진폭 눈금)을 HZ_AXIS_PX 폭으로 그린다 — 여기서 또
+                  들여쓰면 두 번 밀려 스펙트로그램과 어긋난다. */}
+              <SourceWaveform
+                sourceId={source.id}
+                width={760}
+                height={120}
+                band={view === "band_beep"}
+              />
             </div>
             {view === "band_beep" ? (
               <>
