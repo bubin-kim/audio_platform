@@ -50,6 +50,11 @@ const LUT = buildLut();
 
 const GUIDE_LINES_HZ = [1900, 2100];
 
+/** Hz 축(라벨 w-11=44px + gap-1=4px)이 차지하는 왼쪽 폭.
+ * 이 컴포넌트의 시간 라벨과, 위에 함께 놓이는 파형(SourceList)의 들여쓰기가
+ * **같은 값**을 써야 두 그림의 시간축이 세로로 맞는다. */
+export const HZ_AXIS_PX = 48;
+
 /** 크롭 대역에 찍을 Hz 눈금. 멜과 달리 **선형**이라 위치 계산이 단순하다.
  * 200Hz 간격으로 끊되, 대역이 좁으면 100Hz까지 촘촘하게 내려간다. */
 function pickBandTicks(fmin: number, fmax: number): number[] {
@@ -222,10 +227,20 @@ export function SourceBandSpectrogram({
         </span>
       </div>
 
-      <div className="flex justify-between text-xs text-content-subtle">
-        <span className="pl-12">0초</span>
-        <span>1900Hz / 2100Hz 점선 = 비프음 대역</span>
-        <span>{spec.duration_sec.toFixed(0)}초</span>
+      {/* 시간 라벨은 **캔버스와 같은 폭·같은 시작점**에 둔다.
+          컨테이너 전체에 justify-between을 걸면 Hz 축(왼쪽 48px)과 "Hz"
+          접미사(오른쪽)까지 포함해 퍼져서, 0초·100초가 캔버스 밖으로
+          나간다(실측: 100초 라벨이 캔버스 오른쪽 끝보다 203px 바깥).
+          그러면 위의 파형과 시간 눈금이 어긋나 보인다. */}
+      <div className="flex" style={{ paddingLeft: HZ_AXIS_PX }}>
+        <div
+          className="flex justify-between text-xs text-content-subtle"
+          style={{ width }}
+        >
+          <span>0초</span>
+          <span>1900Hz / 2100Hz 점선 = 비프음 대역</span>
+          <span>{spec.duration_sec.toFixed(0)}초</span>
+        </div>
       </div>
 
       <div className="rounded border border-border bg-surface-muted p-2 text-xs">
