@@ -241,6 +241,10 @@ export const getSourceBeepOnsets = (
     bandHighHz?: number;
     k?: number;
     minGapSec?: number;
+    /** 비프음 주기(초). 이 프로젝트 녹음은 10초 주기라 기본으로 켠다 —
+     * 임계값 방식은 신호가 약한 파일(거리·각도에 따라)에서 대량 미탐이
+     * 났다(1일차 54개 중 정상 6개). 주기 누적은 임계값을 안 쓴다. */
+    periodSec?: number;
   },
 ) =>
   request<BeepOnsets>(
@@ -249,6 +253,7 @@ export const getSourceBeepOnsets = (
       band_high_hz: params?.bandHighHz,
       k: params?.k,
       min_gap_sec: params?.minGapSec,
+      period_sec: params?.periodSec ?? 10,
     })}`,
   );
 

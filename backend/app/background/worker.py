@@ -149,10 +149,20 @@ def _run(
                 segment_repo.delete(old)
         db.commit()
 
-    # seq는 Job 단위가 아니라 dataset 누적 (docs/12 A1) — Job마다 1부터 시작하면
-    # 같은 날짜·같은 라벨의 별도 Job이 같은 파일명을 만들어 조용히 덮어쓴다.
-    seq = segment_repo.count_by_dataset(job.dataset_id) + 1
-    job.params = {**job.params, "seq_start": seq}  # 재현성 (JSON 변경 감지 위해 재할당)
+    # seq는 **원본마다 1부터** 다시 센다 (2026-08-28 변경).
+    #
+    # 예전에는 dataset 전역 누적이었다(count_by_dataset + 1). 조용한
+    # 덮어쓰기를 막으려는 의도였지만, 파일명이 `..._518.wav`처럼 원본과
+    # 무관한 큰 번호로 붙어 "이 조각이 몇 번째 원본의 몇 번째인지"를
+    # 읽을 수 없었다. 원본당 10조각이면 001~010이 자연스럽다(사용자 요청).
+    #
+    # 덮어쓰기 방지는 그대로 유지된다 — 아래 `storage.exists()` 검사가
+    # 충돌을 명시적 에러로 만든다. 다만 **라벨 코드가 같은 원본이 둘
+    # 이상이면 반드시 충돌**하므로(파일명이 {라벨코드}_{seq}뿐이라),
+    # 그런 데이터에서는 naming_pattern에 구분 필드를 넣어야 한다.
+    # (실측 2026-08-28: 1~4일차 216개 중 라벨 코드 중복은 0건 —
+    #  3일차 028/029가 같아 보였던 건 029 라벨 오입력 때문이었고 수정함)
+    job.params = {**job.params, "seq_start": 1}  # 재현성 (JSON 변경 감지 위해 재할당)
     db.commit()
 
     # 품질 검사(docs/14): 원본별 조각 수 집계 → 기대치와 비교
@@ -168,8 +178,16 @@ def _run(
             snapshot = snapshots.get(source_id, [])
             per_source_counts[source_id] = {"filename": source.filename, "actual": 0}
 
+            seq = 1  # 원본마다 1부터 — 파일명이 001~010으로 읽힌다
+
+            # naming_pattern이 원본을 구분할 수 있게 원본 정보도 넘긴다.
+            # `{source}`(확장자 뗀 원본 파일명)를 패턴에 넣으면, 같은 라벨
+            # 조합을 여러 번 녹음해도 파일명이 겹치지 않는다 — seq를 원본마다
+            # 1로 리셋하면서 생기는 충돌 위험의 근본 해결책(docs/12 A1).
+            source_stem = Path(source.filename).stem
+
             for seg_audio in strategy.cut(local_source_path, cutting_params):
-                values = {**base_values, "seq": seq}
+                values = {**base_values, "seq": seq, "source": source_stem}
                 filename = render_filename(naming_pattern, values, extension="wav")
 
                 tmp_file = tmp_path / f"tmp_{seq:06d}.wav"

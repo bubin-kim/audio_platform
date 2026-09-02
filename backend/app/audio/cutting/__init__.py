@@ -16,6 +16,7 @@ from app.audio.cutting.base import (
 from app.audio.cutting import (  # noqa: F401,E402
     event_detection,
     fixed_interval,
+    periodic_beep,
     silence_based,
 )
 

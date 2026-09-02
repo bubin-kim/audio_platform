@@ -138,6 +138,7 @@ class UploadService:
         k: float | None = None,
         k_global: float | None = None,
         min_gap_sec: float | None = None,
+        period_sec: float | None = None,
     ) -> dict:
         """원본 통 음원의 대역통과 기반 비프음 onset 검출 + 검증 통계(신규, 표시 전용).
 
@@ -152,6 +153,7 @@ class UploadService:
             "k": k,
             "k_global": k_global,
             "min_gap_sec": min_gap_sec,
+            "period_sec": period_sec,
         }
         onsets = detect_beep_onsets(self.storage.local_path(source.storage_path), params)
         return summarize_onsets(onsets)

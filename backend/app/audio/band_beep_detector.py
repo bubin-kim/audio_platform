@@ -76,6 +76,29 @@ DEFAULTS: dict[str, Any] = {
     "min_gap_sec": 2.0,
     "local_window_sec": 2.0,
     "smooth_ms": 20.0,
+    # --- 주기 모드 (period_sec > 0이면 켜진다) ---
+    # 비프음이 **일정 주기로** 울리는 녹음이면, 지점마다 독립적으로
+    # 임계값을 넘는지 보는 대신 "주기적으로 반복되는가"를 본다.
+    #
+    # 왜 필요한가(실측 2026-08-28, 1일차 54개 전수 검증):
+    #   임계값 방식은 54개 중 정상이 6개뿐이었다(0개 검출 12개, 1~5개
+    #   24개). 원인은 파일마다 신호 세기가 크게 다른 것 — 튜닝에 쓴
+    #   260818_001은 배경 대비 강했지만, 거리·각도가 다른 파일은
+    #   **진짜 비프음이 잡음 상위값보다 작다**(분리 여유 0.25~0.84배).
+    #   단일 임계값으로는 원리적으로 분리할 수 없는 상태다.
+    #
+    #   반면 100초를 10초씩 접어 누적하면 신호는 10배로 쌓이고 잡음은
+    #   √10배만 커진다. 실측 결과 접은 곡선의 대비가 3.7~64배로 뛰어,
+    #   임계값 방식으로 0개였던 파일들(008·049·053)도 위상을 정확히
+    #   찾았다(오차 0.00초). 9개 튜닝 파일 중 8개가 10/10 정확.
+    #
+    # 0이면 꺼진다(기존 임계값 방식). 주기를 모르는 데이터에는 쓰지 않는다.
+    "period_sec": 0.0,
+    # 주기 창 안에서 최대점을 찾을 반경(초). 위상이 조금씩 흔들려도
+    # 따라가되, 너무 넓으면 옆 주기를 침범한다.
+    "period_search_sec": 0.6,
+    # 접어서 위상을 찾을 때 쓰는 국소 배경 제거 창(초).
+    "period_baseline_sec": 2.0,
 }
 
 
@@ -103,6 +126,12 @@ def validate_params(params: dict[str, Any]) -> None:
         raise ValueError("local_window_sec는 양수여야 합니다.")
     if float(_param(params, "smooth_ms")) < 0:
         raise ValueError("smooth_ms는 0 이상이어야 합니다.")
+    if float(_param(params, "period_sec")) < 0:
+        raise ValueError("period_sec는 0 이상이어야 합니다(0이면 주기 모드를 끈다).")
+    if float(_param(params, "period_search_sec")) <= 0:
+        raise ValueError("period_search_sec는 양수여야 합니다.")
+    if float(_param(params, "period_baseline_sec")) <= 0:
+        raise ValueError("period_baseline_sec는 양수여야 합니다.")
 
 
 def _moving_average(x: np.ndarray, win: int) -> np.ndarray:
@@ -155,6 +184,52 @@ def _tonality_db(
     )
 
 
+def _detect_periodic(
+    envelope: np.ndarray,
+    sr: int,
+    *,
+    period_sec: float,
+    search_sec: float,
+    baseline_sec: float,
+) -> list[float]:
+    """주기 누적으로 위상을 찾고, 각 주기 창의 최대점을 onset으로 잡는다.
+
+    임계값을 쓰지 않는다 — "이 지점이 충분히 큰가"가 아니라 "주기적으로
+    반복되는 위치는 어디인가"를 묻기 때문에, 신호가 잡음에 묻혀 있어도
+    (분리 여유 < 1) 위치를 찾아낸다.
+
+    절차:
+      1. 국소 배경(이동 median)을 빼 상승분만 남긴다 — 배경 드리프트가
+         접기 결과를 흐리지 않게.
+      2. period_sec 단위로 잘라 겹쳐 평균낸다(folding). 신호는 매번 같은
+         위치에 쌓이고 잡음은 서로 상쇄된다.
+      3. 접은 곡선의 최대점 = 위상. 그 위상에서 ±search_sec 안의 실제
+         최대점을 주기마다 하나씩 고른다.
+    """
+    base = ndimage.median_filter(
+        envelope, size=int(sr * baseline_sec) | 1, mode="nearest"
+    )
+    rise = np.maximum(envelope - base, 0.0)
+
+    period = int(period_sec * sr)
+    cycles = len(rise) // period
+    if period <= 0 or cycles < 2:
+        return []
+
+    folded = rise[: cycles * period].reshape(cycles, period).mean(axis=0)
+    phase_idx = int(np.argmax(folded))
+
+    half = max(1, int(search_sec * sr))
+    onsets: list[float] = []
+    for i in range(cycles):
+        center = i * period + phase_idx
+        a, b = max(0, center - half), min(len(rise), center + half)
+        if b <= a:
+            continue
+        onsets.append(round(float((a + int(np.argmax(rise[a:b]))) / sr), 3))
+    return onsets
+
+
 def detect_beep_onsets(path: Path, params: dict[str, Any] | None = None) -> list[float]:
     """대역통과 + 지역 적응형 임계값으로 onset 시각(초) 목록을 찾는다.
 
@@ -185,6 +260,17 @@ def detect_beep_onsets(path: Path, params: dict[str, Any] | None = None) -> list
     if smooth_ms > 0:
         win = max(1, int(round(sr * smooth_ms / 1000.0)))
         envelope = _moving_average(envelope, win)
+
+    # 주기 모드 — 주기를 알고 있으면 임계값 없이 위상으로 찾는다(훨씬 강함).
+    period_sec = float(_param(params, "period_sec"))
+    if period_sec > 0:
+        return _detect_periodic(
+            envelope,
+            sr,
+            period_sec=period_sec,
+            search_sec=float(_param(params, "period_search_sec")),
+            baseline_sec=float(_param(params, "period_baseline_sec")),
+        )
 
     local_window_sec = float(_param(params, "local_window_sec"))
     half_win = max(1, int(round(sr * local_window_sec)))

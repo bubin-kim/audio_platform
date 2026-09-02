@@ -183,6 +183,7 @@ def get_source_beep_onsets(
     k: float | None = Query(None, gt=0, description="지역 적응형 임계값 배수(median+k*MAD), 생략 시 기본값"),
     k_global: float | None = Query(None, ge=0, description="전역 하한 배수(경계 오탐 방어), 0이면 끔. 생략 시 기본값"),
     min_gap_sec: float | None = Query(None, gt=0, description="피크 간 최소 간격(초), 생략 시 기본값"),
+    period_sec: float | None = Query(None, ge=0, description="비프음 주기(초). 주면 임계값 대신 주기 누적으로 찾는다 — 약한 신호에 훨씬 강함. 0/생략이면 임계값 방식"),
     db: Session = Depends(get_db),
     storage: StorageBackend = Depends(get_storage_dep),
 ) -> BeepOnsetsRead:
@@ -190,6 +191,7 @@ def get_source_beep_onsets(
         source_file_id,
         band_low_hz=band_low_hz, band_high_hz=band_high_hz,
         k=k, k_global=k_global, min_gap_sec=min_gap_sec,
+        period_sec=period_sec,
     )
     response.headers["Cache-Control"] = "private, max-age=3600"
     return BeepOnsetsRead(**summary)

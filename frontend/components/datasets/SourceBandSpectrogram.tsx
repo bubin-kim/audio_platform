@@ -130,8 +130,11 @@ export function SourceBandSpectrogram({
   };
   const secToX = (sec: number) => (sec / spec.duration_sec) * width;
 
-  // GT(검증) 판정: 오프셋 표준편차가 0.1초 이내면 규칙적 — 검출이 맞았다는 신호.
-  const consistent = onsets.offset_stddev_sec <= 0.1 && onsets.count === 10;
+  // 판정: 주기 모드는 주기 수만큼 항상 돌려주므로 개수보다 **위상 일관성**이
+  // 중요하다. 오프셋 표준편차가 작으면 진짜 비프음을 따라간 것이고, 크면
+  // 주기 위상을 못 찾아 엉뚱한 곳을 짚고 있다는 신호(실측: 정상 파일들은
+  // 0.08~0.27초, 실패한 파일은 3.7초).
+  const consistent = onsets.offset_stddev_sec <= 0.5;
 
   return (
     <div className="flex flex-col gap-2">
@@ -173,8 +176,11 @@ export function SourceBandSpectrogram({
 
       <div className="rounded border border-border bg-surface-muted p-2 text-xs">
         <div className={consistent ? "text-status-ok" : "text-status-warn"}>
-          검출 {onsets.count}개 (기대 10개) ·{" "}
-          {consistent ? "규칙적 — 검출 정상으로 보임" : "불규칙 — 임계값/대역폭 조정 필요"}
+          검출 {onsets.count}개 (기대 10개) · 위상 표준편차{" "}
+          {onsets.offset_stddev_sec.toFixed(2)}초 ·{" "}
+          {consistent
+            ? "규칙적 — 검출 정상으로 보임"
+            : "위상이 흔들림 — 이 파일은 사람이 직접 확인 필요"}
         </div>
         <div className="mt-1 tabular-nums text-content-subtle">
           오프셋(초%10): [{onsets.offsets_sec.map((v) => v.toFixed(2)).join(", ")}]

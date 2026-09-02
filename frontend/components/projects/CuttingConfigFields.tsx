@@ -119,6 +119,49 @@ export const CUTTING_MODES: {
       },
     ],
   },
+  {
+    value: "periodic_beep",
+    label: "주기 검출 — 일정 간격으로 반복되는 소리 (약한 신호에 강함)",
+    fields: [
+      {
+        key: "period_sec",
+        label: "반복 주기(초) — 이 값이 맞아야 동작",
+        required: true,
+        step: 0.5,
+        placeholder: "예: 10",
+      },
+      {
+        key: "before_sec",
+        label: "이벤트 앞 여유(초)",
+        step: 0.5,
+        placeholder: "기본 3",
+      },
+      {
+        key: "after_sec",
+        label: "이벤트 뒤 여유(초)",
+        step: 0.5,
+        placeholder: "기본 3",
+      },
+      {
+        key: "band_low_hz",
+        label: "탐지 대역 하한(Hz)",
+        step: 50,
+        placeholder: "기본 1800",
+      },
+      {
+        key: "band_high_hz",
+        label: "탐지 대역 상한(Hz)",
+        step: 50,
+        placeholder: "기본 2200",
+      },
+      {
+        key: "period_search_sec",
+        label: "주기 창 안 탐색 반경(초)",
+        step: 0.1,
+        placeholder: "기본 0.6",
+      },
+    ],
+  },
 ];
 
 /** Project.cutting_params(숫자) → 폼 입력값(문자열). */

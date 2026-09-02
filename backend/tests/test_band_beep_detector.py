@@ -129,6 +129,9 @@ def test_min_gap_prevents_split_peaks(tmp_path: Path) -> None:
         ({"k": 0}, "k"),
         ({"k_global": -1}, "k_global"),
         ({"tonality_win_sec": 0}, "tonality_win_sec"),
+        ({"period_sec": -1}, "period_sec"),
+        ({"period_search_sec": 0}, "period_search_sec"),
+        ({"period_baseline_sec": 0}, "period_baseline_sec"),
         ({"min_gap_sec": -1}, "min_gap_sec"),
         ({"local_window_sec": 0}, "local_window_sec"),
         ({"smooth_ms": -5}, "smooth_ms"),
@@ -152,7 +155,38 @@ def test_defaults_have_no_domain_branching() -> None:
         "min_gap_sec",
         "local_window_sec",
         "smooth_ms",
+        "period_sec",
+        "period_search_sec",
+        "period_baseline_sec",
     }
+
+
+def test_periodic_mode_finds_weak_signal(tmp_path: Path) -> None:
+    """주기 모드는 임계값 방식이 놓치는 약한 신호도 찾는다.
+
+    실측(1일차 54개 전수 검증)에서 임계값 방식은 정상이 6개뿐이었다 —
+    파일마다 신호 세기가 달라 진짜 비프음이 잡음 상위값보다 작은
+    경우(분리 여유 0.25~0.84배)가 많았기 때문. 주기 누적은 임계값을
+    쓰지 않고 "반복되는 위치"를 찾으므로 이런 신호도 잡는다.
+    """
+    # 임계값으로는 못 잡을 만큼 약한 신호(배경 대비 약간만 큼)
+    wav = _make_file(tmp_path, ONSET_TIMES, noise_amp=0.5, name="weak.wav")
+
+    threshold_mode = detect_beep_onsets(wav, {})
+    periodic_mode = detect_beep_onsets(wav, {"period_sec": 10.0})
+
+    # 주기 모드는 주기 수만큼(=10개) 항상 돌려준다
+    assert len(periodic_mode) == 10
+    # 그리고 위상이 일정하다 — 진짜 신호를 따라간다는 뜻
+    offsets = [o % 10 for o in periodic_mode]
+    assert float(np.std(offsets)) < 0.5, f"위상이 흔들림: {offsets}"
+    # 임계값 모드보다 많이 찾거나 같아야 한다(이 신호에선 더 많이)
+    assert len(periodic_mode) >= len(threshold_mode)
+
+
+def test_periodic_mode_off_by_default() -> None:
+    """period_sec 기본값은 0 — 주기를 모르는 데이터에는 켜지지 않는다."""
+    assert DEFAULTS["period_sec"] == 0.0
 
 
 def test_tonality_filter_rejects_broadband(tmp_path: Path) -> None:

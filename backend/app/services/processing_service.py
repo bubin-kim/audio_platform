@@ -104,10 +104,14 @@ class ProcessingService:
         """naming_pattern의 필드가 커팅 시점에 전부 채워질 수 있는지 fail-fast 검사.
 
         worker가 각 세그먼트 파일명을 만들 때 쓸 수 있는 값은
-        common_labels + 자동값(date, seq)뿐이다. 부족하면 Job이 백그라운드에서
-        실패하게 되므로, 시작 전에 400으로 명확히 알려준다.
+        common_labels + 자동값(date, seq, source)뿐이다. 부족하면 Job이
+        백그라운드에서 실패하게 되므로, 시작 전에 400으로 명확히 알려준다.
+
+        `source`는 확장자를 뗀 원본 파일명이다 — seq가 원본마다 1부터
+        다시 세므로(2026-08-28), 같은 라벨 조합을 여러 번 녹음했다면
+        패턴에 이 필드를 넣어야 파일명이 겹치지 않는다(docs/12 A1).
         """
-        auto_fields = {"date", "seq"}
+        auto_fields = {"date", "seq", "source"}
         provided = set(common_labels) | auto_fields
         missing = [f for f in pattern_fields(naming_pattern) if f not in provided]
         if missing:

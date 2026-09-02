@@ -183,14 +183,17 @@ def test_replace_common_labels_override_inherited(
 # --- A1: 파일명 충돌 방지 (docs/12) ---
 
 
-def test_seq_continues_across_jobs_no_overwrite(
+def test_source_field_prevents_collision_across_jobs(
     client: TestClient, make_wav: Callable[..., Path]
 ) -> None:
     """같은 조합을 두 번 녹음(원본 2개)해 별도 Job으로 커팅 — 사고 시나리오 (docs/12 A1).
 
-    seq가 dataset 누적으로 이어져 파일명이 겹치지 않고, 파일도 전부 실존해야 한다.
+    seq는 **원본마다 1부터** 다시 세므로(2026-08-28 변경), 파일명이 겹치지
+    않으려면 naming_pattern에 원본을 구분하는 `{source}`가 있어야 한다.
+    그러면 재촬영을 몇 번 하든 충돌하지 않는다.
     """
-    pid = client.post("/api/projects", json=_project_payload()).json()["id"]
+    payload = _project_payload(naming_pattern="{date}_{source}_{seq:03d}")
+    pid = client.post("/api/projects", json=payload).json()["id"]
     ds_id = None
     for name in ("rec_take1.wav", "rec_take2.wav"):
         wav = make_wav(duration_sec=3.0, name=name)
@@ -207,15 +210,37 @@ def test_seq_continues_across_jobs_no_overwrite(
         assert r.status_code == 202, r.text
 
     segs = client.get(f"/api/datasets/{ds_id}/segments?limit=100").json()["items"]
-    assert len(segs) == 6  # 3 + 3 (덮어쓰기 없이 누적)
+    assert len(segs) == 6  # 3 + 3 (덮어쓰기 없이)
     filenames = [s["filename"] for s in segs]
     assert len(set(filenames)) == 6, f"파일명 중복: {filenames}"
-    # seq가 이어짐: _001~_006
-    assert sorted(filenames)[-1].endswith("_006.wav")
-    # 스토리지에 6개 파일 전부 실존 + 경로 중복 없음
+    # 원본마다 001~003으로 리셋 — 원본명으로 구분된다
+    assert sum(f.endswith("_001.wav") for f in filenames) == 2, filenames
+    assert all("rec_take1" in f or "rec_take2" in f for f in filenames), filenames
+    # 스토리지에도 6개가 각각 실존 (조용한 덮어쓰기 없음)
     paths = [s["storage_path"] for s in segs]
     assert len(set(paths)) == 6
     assert all(client._storage.exists(p) for p in paths)
+
+
+def test_seq_resets_per_source(
+    client: TestClient, make_wav: Callable[..., Path]
+) -> None:
+    """seq는 원본마다 001부터 — 파일명으로 '몇 번째 조각'인지 읽을 수 있다."""
+    payload = _project_payload(naming_pattern="{date}_{source}_{seq:03d}")
+    pid = client.post("/api/projects", json=payload).json()["id"]
+    wav = make_wav(duration_sec=3.0, name="rec.wav")
+    up = upload_file(client, pid, wav, "rec.wav")
+    ds_id, sfid = up["dataset_id"], up["sources"][0]["id"]
+    client.post(
+        f"/api/datasets/{ds_id}/process",
+        json={"source_file_ids": [sfid], "common_labels": {"patient_id": "P01"}},
+    )
+    segs = client.get(f"/api/datasets/{ds_id}/segments?limit=100").json()["items"]
+    filenames = sorted(s["filename"] for s in segs)
+    # 원본명(rec)이 들어가고 seq가 001부터 — 예: 20260828_rec_001.wav
+    assert all("_rec_" in f for f in filenames), filenames
+    seqs = sorted(f.removesuffix(".wav").rsplit("_", 1)[1] for f in filenames)
+    assert seqs == ["001", "002", "003"], seqs
 
 
 def test_seq_start_recorded_in_job_params(
