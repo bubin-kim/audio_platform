@@ -130,13 +130,17 @@ def test_cut_uses_before_after_window(tmp_path: Path) -> None:
     합성 배경에서는 오탐이 섞일 수 있으므로 개수를 못 박지 않는다(실파일
     정확도는 GT로 따로 검증 — docs/17). 여기서 볼 것은 **창 크기 계약**이다.
     """
-    wav = _make_file(tmp_path, [10.0, 20.0])
+    duration = 40.0
+    wav = _make_file(tmp_path, [10.0, 20.0], duration=duration)
     segments = list(EventDetectionStrategy().cut(wav, {}))
     assert len(segments) >= 2
 
-    # 파일 시작/끝에 걸린 조각은 잘려서 6초보다 짧다 (start_sec=0 등) — 정상.
-    # 창 크기 계약은 양끝에 안 걸린 조각으로 확인한다.
-    interior = [s for s in segments if s.start_sec > 0.0]
+    # 파일 시작/끝에 걸린 조각은 잘려서 6초보다 짧다 (start_sec=0, end_sec=duration
+    # 등) — 정상. nperseg가 크면(시간 해상도↓) 끝 경계 부근 배경 오탐 가능성도
+    # 올라가므로(§2j), 창 크기 계약은 양끝에 안 걸린 조각으로만 확인한다.
+    interior = [
+        s for s in segments if s.start_sec > 0.0 and s.end_sec < duration - 0.01
+    ]
     assert interior, "양끝에 안 걸린 조각이 없다"
     for seg in interior:
         assert abs(seg.duration_sec - 6.0) < 0.2
