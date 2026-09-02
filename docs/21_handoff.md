@@ -62,6 +62,11 @@ cd .. && ./scripts/dev.sh
 - `STORAGE_MODE=local`, ACCESS_TOKEN은 NAS `.env`에 있음(코드/문서에 안 남김)
 - 1~4일차 본수집 216개 원본 + 세그먼트 2,137개가 여기에 있다 — **검수·분석은
   이제 이 NAS 주소를 기준으로 한다.**
+- **저장소 경로가 최종적으로 `/volume1/AURA/01_Projects/01_BeepSound/
+  03_Experiment`로 바뀌었다**(2026-08-27, §3-8·§3-9 — 같은 날 두 번
+  이전됨: `audio-platform` → `beep_sound_dataset` → 이 경로). 예전
+  경로는 전부 삭제됨. 데이터는 형제 폴더 `02_Dataset`, 원본 녹음은
+  `01_Raw`에 있다. 상세 구조는 docs/20.
 
 ---
 
@@ -236,9 +241,114 @@ dataset 전역 누적(`count_by_dataset + 1`, worker.py:154)이라 **029를 먼�
 4. mapping.py의 DAY3_MIC1[24]·DAY4_MIC1(32~61 오프셋 규칙)은 이미 검증
    완료 — 재사용 가능
 
+### 3-8. audio-platform → beep_sound_dataset 폴더 통합 — **완료** (2026-08-27)
+
+교수님 지시: "beep_sound_dataset 폴더 하나에 녹음본·업로드본·세그먼트 다
+들어가게 하고, audio-platform 폴더는 삭제"(연구원 tykim23·bbkim23이
+이미 원본 mic1·mic2를 올려둔 폴더와 플랫폼을 하나로 합침).
+
+**조사로 밝혀진 사전 상태**: `beep_sound_dataset/segments/`에 이미
+플랫폼 데이터와 100% 동일한 사본이 존재했다(`diff -rq`로 확인, 파일
+개수·크기·mtime 전부 일치) — `_dataset_info.txt`(어제 배포한 안내파일
+기능의 산물)까지 포함돼 있어, 연구원이 최근(8/26~27) `audio-platform/data`를
+미리 복사해둔 것으로 판단. 두 볼륨은 서로 다른 btrfs subvolume(inode도
+다름)이라 심볼릭 링크가 아니라 완전 별도의 물리적 복사본이었다. 실제
+컨테이너가 마운트하는 곳(`docker inspect`로 확인)은 여전히
+`audio-platform/data`였다.
+
+**이전 절차**:
+1. 백업: 코드(`tar.gz`, db 폴더 제외) + DB(`pg_dump`) → `/volume1/backups/`
+2. `sudo docker compose down`
+3. `audio-platform/data/uploads` → `beep_sound_dataset/uploads` 이동
+4. `beep_sound_dataset/segments`(사본)를 지우고 `audio-platform/data/segments`
+   (진짜)를 이동 — 사본이 아닌 원본을 남기는 원칙
+5. 코드·설정·DB(`backend`·`frontend`·`.env`·`compose.yaml`·`db`·`.git`
+   등 전부) 이동. **`db` 폴더는 소유자가 postgres uid(70)라 일반 계정
+   `mv`가 실패 — `sudo mv` 필요**했다.
+6. `compose.yaml`의 볼륨 마운트를 `./data:/data` 하나에서
+   `./uploads:/data/uploads`·`./segments:/data/segments`·
+   `./exports:/data/exports` 개별 마운트로 변경(mic1·mic2·backend를
+   컨테이너에 노출하지 않기 위해) — 로컬 `docker-compose.nas.yml` 커밋
+   `682afef` 후 scp로 NAS에 전송
+7. `beep_sound_dataset`에서 `sudo docker compose up -d --build`
+   — **`exports` 폴더가 없어서 첫 시도는
+   `Bind mount failed: '.../exports' does not exist`로 실패**, `mkdir -p
+   exports` 후 재시도해 성공
+8. 전수 검증: 8개 dataset 전부 세그먼트 개수 이전과 정확히 일치(1:532,
+   2:539, 3:540, 4:526, 5~8:540), 각 dataset 대표 파일 waveform API
+   전부 200 OK 확인
+9. 검증 통과 후 `audio-platform` 폴더 전체 삭제(`sudo rm -rf`)
+
+**부수 발견 — dataset 삭제 시 잔재 남는 버그**: 검증용으로 만들었던
+dataset 9·10을 API로 삭제(204 확인)했는데도 `uploads/10`·`segments/10`
+폴더와 그 안의 `_dataset_info.txt`가 파일시스템에 그대로 남아있었다.
+`DatasetService.collect_storage_paths()`가 세그먼트·원본·export 파일만
+모으고 `_dataset_info.txt`(안내파일 기능, 커밋 `12cd98d`)는 목록에
+없어서 삭제 대상에서 빠진 것 — **같은 날 수정 완료**(`a0c25b7`,
+`collect_storage_paths`에 안내파일 경로 추가 + `get_or_create_default`
+경로에도 안내파일 생성 누락돼 있던 것 함께 수정, §3-10 참고).
+
+**1차 통합 구조**(이후 §3-9에서 다시 3분할로 재이전됨): 당시엔
+`/volume1/beep_sound_dataset/`에 `mic1`·`mic2`(원본, 연구원 직접
+관리)·`uploads`·`segments`·`exports`(플랫폼 데이터)·`backend`·
+`frontend`·`db`·`.env`·`compose.yaml` 등 전부 통합했었다.
+
+### 3-9. beep_sound_dataset → 01_BeepSound 3분할 재이전 — **완료** (2026-08-27, 같은 날)
+
+교수님이 §3-8 직후 다시 지시: "beep_sound_dataset도 없애고, AURA →
+01_Projects → 01_BeepSound에 들어가게 하라"— 이 폴더 안에 이미
+`01_Raw`·`02_Dataset`·`03_Experiment` 3개 하위 폴더가 준비돼 있었다.
+
+**배치 결정**(사용자 확정):
+- `01_Raw` ← `mic1/`, `mic2/` (녹음 원본)
+- `02_Dataset` ← `uploads/`, `segments/`, `exports/` (플랫폼이 관리하는
+  업로드본·커팅 조각·CSV — "정제된 데이터셋 산출물")
+- `03_Experiment` ← `backend/`, `frontend/`, `db/`, `.env`,
+  `compose.yaml` 등 플랫폼 코드+DB 전체 ("실험을 굴리는 도구/환경")
+
+**경로 확인 함정**: `01_BeepSound`가 실제로 두 경로에 다 보였다 —
+`/volume1/AURA/01_Projects/01_BeepSound`(일반 사용자 경로)와
+`/volume1/@appdata/ContainerManager/all_shares/AURA/01_Projects/
+01_BeepSound`(Container Manager 경로). `ls -di`로 inode를 비교해 완전히
+같은 물리 위치(bind mount)임을 확인 — §3-8의 `beep_sound_dataset`도
+같은 패턴이었다. **compose.yaml의 볼륨 마운트는 Container Manager
+경로를 기준으로 삼는다**(사용자 결정, Docker가 더 안정적으로 인식).
+
+**compose.yaml은 03_Experiment 안, 데이터는 형제 폴더 02_Dataset에** —
+상대경로(`./uploads`)로는 더 이상 안 닿으므로 절대경로로 바꿨다.
+다음에 또 구조가 바뀔 걸 대비해 `${DATASET_DIR:-절대경로기본값}`
+환경변수로 오버라이드 가능하게 했다(`.env`에 `DATASET_DIR=...`만
+추가하면 코드 수정 없이 이전 가능) — 커밋 `d9805dd`.
+
+**절차**: 코드 백업(tar.gz, `db`·데이터 폴더 제외) + DB 덤프
+(`audio_platform_db_20260827_v2.sql`) → `docker compose down` →
+`01_Raw`·`02_Dataset`·`03_Experiment`로 각각 이동(`db`는 §3-8과 같이
+소유권 때문에 `sudo mv` 필요) → compose.yaml 수정·전송(맥 새 터미널
+scp, `grep`으로 반영 확인) → `03_Experiment`에서 `sudo docker compose
+up -d --build`(컨테이너 이름이 `03_experiment-*`로 자동 변경됨) →
+8개 dataset 전수 검증(세그먼트 개수 일치, waveform 200) → 
+`beep_sound_dataset` 폴더 삭제.
+
+**최종 구조**: `/volume1/AURA/01_Projects/01_BeepSound/
+{01_Raw,02_Dataset,03_Experiment}`. 상세는 docs/20(갱신 완료).
+
+### 3-10. dataset 삭제 시 안내파일 잔재 버그 수정 — **완료** (2026-08-27)
+
+§3-7에서 발견한 버그(`_dataset_info.txt`가 dataset 삭제 시 파일시스템에
+안 지워짐)를 커밋 `a0c25b7`로 수정. `DatasetService.
+collect_storage_paths()`에 안내파일 경로 2개(`uploads/{id}/
+_dataset_info.txt`, `segments/{id}/_dataset_info.txt`)를 추가했고,
+업로드 시 자동 생성되는 기본 dataset 경로(`get_or_create_default()`)
+에도 안내파일 생성이 원래 빠져 있어 `storage` 파라미터를 추가해 통일.
+테스트(`test_delete_api.py`)에 안내파일 생성·삭제 검증 추가, 전체
+231개 테스트 통과 확인. **로컬에서만 수정·테스트 완료, NAS 배포는
+3분할 이전(§3-9)과 겹쳐 다음 세션에서 재배포 필요** — 이전 중
+`db/backend/services/dataset_service.py`가 다시 이동됐으므로 새 경로
+(`03_Experiment/backend/...`)로 scp해야 한다.
+
 ---
 
-## 4. 서버 현재 상태 (2026-08-26)
+## 4. 서버 현재 상태 (2026-08-27)
 
 **NAS (본수집 주력, http://203.247.33.93:8100)**
 
@@ -397,6 +507,55 @@ DELETE + Notion 페이지도 아카이브. **실데이터 프로젝트를 검증
     전송 후에도 "완료됐다"는 말만 믿지 말고 **`ls -la`로 NAS 파일의
     mtime이 실제로 바뀌었는지, `grep`으로 새 코드 문자열이 들어있는지**
     직접 확인할 것 — 이번에도 처음엔 옛 파일 그대로였다.
+
+25. **`dataset` API로 삭제해도 `_dataset_info.txt`와 빈 uploads/segments
+    폴더가 파일시스템에 남는다(미수정 버그).** `DatasetService.
+    collect_storage_paths()`가 세그먼트·원본·export 파일 경로만 모으고
+    안내파일(커밋 `12cd98d`)은 대상에 없어서다. 검증용 dataset을
+    만들었다 지웠는데 다음 dataset 개수 세기(`ls | wc -l`)가 예상보다
+    많이 나오면 이 잔재를 의심할 것 — 2026-08-27 beep_sound_dataset
+    이전 중 dataset 10 잔재로 실제로 겪었다(수동으로 `rm -rf` 정리).
+    다음 세션에서 `collect_storage_paths`에 `_dataset_info.txt` 경로도
+    포함하도록 고칠 것.
+
+26. **NAS의 `db/` 폴더(PostgreSQL 데이터 디렉터리)는 소유자가 postgres
+    컨테이너 내부 uid(70)라 일반 계정 `mv`가 `Permission denied`로
+    실패한다.** `sudo mv`를 써야 한다. `docker compose down`으로
+    컨테이너를 내린 상태에서만 옮길 것(떠 있는 채로 옮기면 DB 파일
+    손상 위험).
+
+27. **`compose.yaml`이 개별 폴더를 bind mount(`./uploads:/data/uploads`
+    등)로 참조하면, 그 폴더가 미리 존재해야 `docker compose up`이
+    성공한다** — 없으면 `Bind mount failed: '...' does not exist`로
+    기동 자체가 실패한다(단일 마운트 `./data:/data`였을 때는 하위
+    폴더가 없어도 상위 `data`만 있으면 됐던 것과 다른 점). CSV export를
+    한 번도 안 돌린 새 배치에서는 `exports/` 폴더가 아예 없을 수
+    있으니, 이런 구조로 옮길 땐 대상 폴더들을 `mkdir -p`로 미리
+    만들어 둘 것.
+
+28. **NAS의 일반 계정은 `/volume1` 최상위에 새 폴더를 만들 권한이
+    없다** (`mkdir: cannot create directory '/volume1/backups':
+    Permission denied`) — `sudo mkdir` + `sudo chmod`로 우회.
+
+29. **시놀로지 공유 폴더는 두 가지 경로로 동시에 보인다** —
+    `/volume1/<공유폴더명>/...`(일반 사용자 경로)와
+    `/volume1/@appdata/ContainerManager/all_shares/<공유폴더명>/...`
+    (Container Manager 경로) — `ls -di`로 inode를 비교하면 완전히 같은
+    물리 위치(bind mount)임을 확인할 수 있다. **Docker Compose 볼륨
+    마운트는 Container Manager 경로를 쓰는 게 더 안정적**이다(2026-08-27
+    확정 관례). `docker compose` 볼륨의 상대경로(`./x`)는 compose.yaml
+    파일이 있는 위치 기준이므로, **코드와 데이터가 다른 폴더에 있으면
+    반드시 절대경로로 바꿔야 한다** — 상대경로를 그대로 두면 엉뚱한
+    곳에 빈 폴더가 새로 생기거나 `Bind mount failed`가 난다.
+
+30. **NAS 저장소 경로가 짧은 시간에 반복해서 바뀔 수 있다** (실제로
+    하루 만에 두 번: `audio-platform`→`beep_sound_dataset`→
+    `01_BeepSound/03_Experiment`). 매번 compose.yaml을 손으로 고치는
+    대신 **`${DATASET_DIR:-기본경로}` 같은 환경변수 오버라이드**를 넣어
+    두면, 다음 이전은 `.env`에 한 줄 추가하는 것만으로 끝난다(코드
+    수정·커밋·scp 재전송 불필요) — docs/17·21처럼 반복될 걸 알면서도
+    매번 문서만 고치는 대신, 이런 구조적 대비를 해두는 게 다음 세션의
+    시간을 아낀다.
 
 ---
 

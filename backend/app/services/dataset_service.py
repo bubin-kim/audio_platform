@@ -170,7 +170,9 @@ class DatasetService:
             self.repo.count_by_project(project_id),
         )
 
-    def get_or_create_default(self, project_id: int) -> tuple[Dataset, bool]:
+    def get_or_create_default(
+        self, project_id: int, *, storage: StorageBackend | None = None
+    ) -> tuple[Dataset, bool]:
         """프로젝트의 기본 Dataset을 반환. 없으면 v1을 만들고 (dataset, True)."""
         existing = self.repo.first_for_project(project_id)
         if existing is not None:
@@ -179,6 +181,9 @@ class DatasetService:
         self.repo.add(dataset)
         self.db.commit()
         self.db.refresh(dataset)
+        if storage is not None:
+            project = self.project_repo.get(project_id)
+            self._write_folder_hint(storage, dataset, project.name if project else "")
         return dataset, True
 
     def _ensure_project(self, project_id: int) -> None:
@@ -188,13 +193,20 @@ class DatasetService:
     # --- 삭제 (docs/12 B1) ---
 
     def collect_storage_paths(self, dataset: Dataset) -> list[str]:
-        """dataset에 속한 모든 파일의 논리 경로 (세그먼트 + 원본 + export 결과물)."""
+        """dataset에 속한 모든 파일의 논리 경로 (세그먼트 + 원본 + export 결과물 + 안내파일)."""
         paths = [s.storage_path for s in self.segment_repo.all_for_dataset(dataset.id)]
         paths += [sf.storage_path for sf in self.source_repo.list_by_dataset(dataset.id)]
         paths += [
             j.result_path
             for j in self.job_repo.list_by_dataset(dataset.id, limit=1000)
             if j.type == "export" and j.result_path
+        ]
+        # _write_folder_hint()가 만드는 안내파일 — 여기 빠지면 세그먼트가
+        # 0개인 dataset을 지워도 폴더와 안내파일이 그대로 남는다(실사고,
+        # docs/21 §5 항목25).
+        paths += [
+            f"{prefix}/{dataset.id}/_dataset_info.txt"
+            for prefix in ("uploads", "segments")
         ]
         return paths
 

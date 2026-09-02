@@ -81,10 +81,16 @@ def test_delete_dataset_requires_matching_confirm(
     assert r.status_code == 400
     assert "확인 이름" in r.json()["detail"]
 
+    # 폴더 안내파일(docs/17 §2l)도 세그먼트·원본과 함께 지워져야 한다 —
+    # 예전엔 collect_storage_paths가 이 파일을 몰라서 dataset을 지워도
+    # uploads/{id}·segments/{id}에 안내파일이 그대로 남는 버그가 있었다.
+    assert client._storage.exists(f"uploads/{ds_id}/_dataset_info.txt")
+    assert client._storage.exists(f"segments/{ds_id}/_dataset_info.txt")
+
     r = client.delete(f"/api/datasets/{ds_id}?confirm={ds_name}")
     assert r.status_code == 204
     assert client.get(f"/api/datasets/{ds_id}").status_code == 404
-    # 파일 전부 정리 (세그먼트 + 원본 + export CSV)
+    # 파일 전부 정리 (세그먼트 + 원본 + export CSV + 안내파일)
     assert client._storage.list(f"segments/{ds_id}") == []
     assert client._storage.list(f"uploads/{ds_id}") == []
 

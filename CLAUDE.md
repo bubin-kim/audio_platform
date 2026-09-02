@@ -347,11 +347,31 @@ cd frontend && npm run build          # 프론트 타입체크 + 빌드
   카운터가 부분 재처리 시 충돌(파일명 충돌 에러) — 두 원본을 **같은 Job**으로
   묶어 재처리해 해결. 상세는 docs/17 §2k, docs/21 §5 항목 23.
   1일차 532·2일차 539·3일차 540·4일차 526 세그먼트.
-- **최신 마일스톤 커밋**: `656d8fe` (nperseg 4096 GT 재검증 채택).
-  NAS 배포·데이터 이전은 코드 커밋 없음(인프라 전환 + 데이터 작업).
+- ✅ **dataset 폴더 안내파일 자동화**: 생성·이름변경 시 `uploads/{id}`·
+  `segments/{id}` 폴더에 `_dataset_info.txt` 자동 생성 — `12cd98d`.
+  File Station에서 폴더명을 직접 rename하다 storage_path와 어긋나
+  waveform·spectrogram이 전부 500 났던 사고(docs/17 §2l) 재발 방지.
+  기존 NAS dataset 1~8에 소급 적용 완료. **알려진 결함**: dataset 삭제
+  시 이 안내파일과 빈 폴더가 파일시스템에서 안 지워짐(docs/21 §5 항목25,
+  미수정).
+- ✅ **NAS 저장소를 beep_sound_dataset 폴더로 통합** 완료 2026-08-27
+  (docs/20 갱신, docs/21 §3-8): 교수님 지시로 `/volume1/audio-platform`
+  (플랫폼 코드+DB+데이터)을 연구원이 원본을 올려두던
+  `/volume1/beep_sound_dataset`(mic1·mic2) 안으로 통합, 옛 폴더는 삭제.
+  compose.yaml 볼륨을 `./data:/data` 단일 마운트에서
+  `uploads`·`segments`·`exports` 개별 마운트로 변경(mic1·mic2·코드를
+  컨테이너에 노출 안 함) — `682afef`. 이전 전 코드+DB 백업(tar.gz+pg_dump)
+  후 서비스 중지 → 데이터·코드 이동 → 마운트 경로 수정 → 재기동 →
+  8개 dataset 전수 검증(세그먼트 개수 일치, 파일 접근 200 OK) → 원본
+  폴더 삭제 순으로 안전하게 진행. 함정 3건(db 폴더 소유권 sudo mv 필요,
+  bind mount 대상 폴더 사전 생성 필요, `/volume1` 최상위 mkdir 권한
+  없음)은 docs/21 §5 항목26~28에 기록.
+- **최신 마일스톤 커밋**: `682afef` (compose.yaml 개별 마운트 변경).
+  폴더 이전 자체는 인프라 작업(코드 커밋 없음).
 - 남은 V2 자리: GitHub(Dataset 버전), AI Assistant, Auth.
 - **잔여**: 1~4일차 NAS 데이터 사람 검수(docs/19) 미착수. Railway 실서버(project
-  41/42/45)에 남은 검증용 잔존 데이터 정리 여부 미확인.
+  41/42/45)에 남은 검증용 잔존 데이터 정리 여부 미확인. dataset 삭제 시
+  `_dataset_info.txt` 잔재 버그 미수정(위 항목 참고).
 
 ## 12. 하지 말 것 (Don'ts)
 

@@ -4,7 +4,14 @@
 #       SSH로 접속해 `docker compose -f docker-compose.nas.yml up -d`
 #
 # 데이터는 전부 NAS 볼륨에 남는다 — 클라우드 요금 0원, 용량은 NAS 크기만큼.
-# 컨테이너를 지웠다 다시 만들어도 ./data, ./db 폴더가 있으면 그대로 이어진다.
+# 컨테이너를 지웠다 다시 만들어도 02_Dataset/, ./db 폴더가 있으면 그대로 이어진다.
+#
+# 2026-08-27: beep_sound_dataset 폴더로 통합 이전(§2j) 후, 다시
+# 01_Projects/01_BeepSound/{01_Raw,02_Dataset,03_Experiment} 3분할 구조로
+# 재이전했다(docs/21 §5 항목29). 이 compose.yaml은 03_Experiment 안에
+# 있고, uploads/segments/exports는 형제 폴더 02_Dataset 안에 있어
+# **절대경로**로 마운트한다 — 01_Raw(mic1·mic2)는 플랫폼이 몰라도 되므로
+# 마운트하지 않는다.
 
 services:
   db:
@@ -45,7 +52,11 @@ services:
       NTFY_TOPIC: ${NTFY_TOPIC:-}
       PORT: 8000
     volumes:
-      - ./data:/data          # 원본·조각·export 전부 여기 (NAS 디스크)
+      # 02_Dataset(형제 폴더)를 절대경로로 마운트 — NAS 실제 경로에 맞춰
+      # ${DATASET_DIR}로 오버라이드 가능하게 해뒀다(기본값이 이번 배치 경로).
+      - ${DATASET_DIR:-/volume1/@appdata/ContainerManager/all_shares/AURA/01_Projects/01_BeepSound/02_Dataset}/uploads:/data/uploads
+      - ${DATASET_DIR:-/volume1/@appdata/ContainerManager/all_shares/AURA/01_Projects/01_BeepSound/02_Dataset}/segments:/data/segments
+      - ${DATASET_DIR:-/volume1/@appdata/ContainerManager/all_shares/AURA/01_Projects/01_BeepSound/02_Dataset}/exports:/data/exports
     ports:
       - "${BACKEND_PORT:-8100}:8000"
 

@@ -1,7 +1,18 @@
 # 20. NAS 자체 호스팅 (시놀로지 DS925+)
 
-> 상태: **설치 안내 (v1.0, 2026-08-18)**
+> 상태: **설치 안내 (v1.0, 2026-08-18) → beep_sound_dataset 통합 (v1.1) →
+> 01_BeepSound 3분할 (v1.2, 2026-08-27)**
 > 목적: 클라우드 요금 없이 NAS에서 플랫폼을 돌리고, 데이터를 전부 NAS에 둔다.
+>
+> **2026-08-27, 두 차례 경로 변경이 있었다** (둘 다 교수님 지시):
+> 1. `/volume1/audio-platform` → `/volume1/beep_sound_dataset`
+>    (연구원 원본 폴더와 플랫폼 통합)
+> 2. `/volume1/beep_sound_dataset` → **`/volume1/AURA/01_Projects/
+>    01_BeepSound/{01_Raw,02_Dataset,03_Experiment}`** (원본·데이터셋·
+>    실험환경 3분할)
+>
+> 아래 절차는 최종(3분할) 경로 기준으로 갱신했다. 상세 이전 기록은
+> docs/21 §5 항목25(1차)·항목29(2차).
 
 ## 왜 NAS인가
 
@@ -19,7 +30,10 @@
 
 - 시놀로지 DS925+ (DSM 7.2 이상)
 - **Container Manager** 패키지 (패키지 센터에서 설치)
-- 저장소 폴더 하나 (예: `/volume1/audio-platform`)
+- 플랫폼 코드는 `/volume1/AURA/01_Projects/01_BeepSound/03_Experiment`
+  (=`/volume1/@appdata/ContainerManager/all_shares/AURA/01_Projects/
+  01_BeepSound/03_Experiment` — 같은 물리 위치를 가리키는 두 경로,
+  Container Manager는 후자를 쓴다). §데이터가 어디에 쌓이나 참고.
 
 DS925+ 기본 RAM 4GB로 충분하다(백엔드+DB+프론트 합쳐 1GB 내외).
 
@@ -31,9 +45,16 @@ DS925+ 기본 RAM 4GB로 충분하다(백엔드+DB+프론트 합쳐 1GB 내외).
 
 ```bash
 # NAS에 SSH 접속 후 (제어판 > 터미널 및 SNMP > SSH 활성화)
-cd /volume1/audio-platform
+cd /volume1/AURA/01_Projects/01_BeepSound/03_Experiment
 git clone https://github.com/bubin-kim/audio_platform.git .
 ```
+
+**함정**: NAS에는 보통 `git`이 설치돼 있지 않다(`-sh: git: command not
+found`). 코드 갱신은 맥 터미널에서 `scp -O <파일> <계정>@<NAS IP>:<경로>`로
+개별 전송한다 — 반드시 NAS SSH 세션이 **아닌** 맥의 새 터미널에서 실행할
+것(NAS 안의 구버전 scp는 `-O` 옵션을 모른다). 전송 후 `ls -la`로 mtime,
+`grep`으로 실제 코드 내용이 바뀌었는지 직접 확인할 것 — "전송 완료"라는
+말만으로는 실제 반영 여부를 알 수 없다(반복 실측됨, docs/21 §5 항목24).
 
 ### 2. 설정 파일 만들기
 
@@ -66,15 +87,28 @@ NOTION_DATABASE_ID=
 
 **방법 A — Container Manager (GUI)**
 1. Container Manager > 프로젝트 > 생성
-2. 경로: `/volume1/audio-platform`, 소스: `docker-compose.nas.yml` 선택
+2. 경로: `.../01_BeepSound/03_Experiment`, 소스: `compose.yaml`
+   (=`docker-compose.nas.yml`) 선택
 3. 빌드가 5~10분 걸린다(처음 한 번만)
 
 **방법 B — SSH**
 ```bash
-cd /volume1/audio-platform
-docker compose -f docker-compose.nas.yml up -d --build
-docker compose -f docker-compose.nas.yml logs -f    # 진행 확인
+cd /volume1/AURA/01_Projects/01_BeepSound/03_Experiment
+sudo docker compose up -d --build
+sudo docker compose logs -f    # 진행 확인
 ```
+
+일반 계정은 Docker 소켓 권한이 없어 `permission denied while trying to
+connect to the Docker daemon socket`가 날 수 있다 — `sudo`를 붙인다.
+
+**`02_Dataset/{uploads,segments,exports}` 폴더가 미리 있어야 한다** —
+compose.yaml이 이 세 폴더를 형제 폴더(`02_Dataset`)에서 절대경로로
+bind mount하는데(§데이터가 어디에 쌓이나), 폴더가 없으면
+`Bind mount failed: '...' does not exist`로 기동이 실패한다. 특히
+`exports`는 CSV export를 한 번도 실행 안 했으면 자동 생성 안 되어
+있으니 미리 `mkdir -p exports`로 만들어 둘 것. 마운트 기준 경로는
+`compose.yaml`의 `DATASET_DIR` 환경변수로 오버라이드할 수 있다
+(`.env`에 `DATASET_DIR=/새경로`).
 
 ### 4. 접속 확인
 
@@ -92,29 +126,55 @@ docker compose -f docker-compose.nas.yml logs -f    # 진행 확인
 ## 데이터가 어디에 쌓이나
 
 ```
-/volume1/audio-platform/
-├── data/          ← 오디오 원본·조각·CSV export (실제 용량 대부분)
-│   ├── uploads/   ← 업로드한 원본
-│   ├── segments/  ← 커팅된 조각
-│   └── exports/   ← CSV
-└── db/            ← PostgreSQL 데이터 (메타데이터·라벨)
+/volume1/AURA/01_Projects/01_BeepSound/
+├── 01_Raw/
+│   └── mic1/, mic2/       ← 연구원이 올려두는 녹음 원본 (플랫폼 무관)
+├── 02_Dataset/
+│   ├── uploads/           ← 플랫폼에 업로드한 원본 (컨테이너 /data/uploads)
+│   ├── segments/          ← 커팅된 조각 (컨테이너 /data/segments)
+│   └── exports/           ← CSV export (컨테이너 /data/exports)
+└── 03_Experiment/
+    ├── backend/, frontend/  ← 플랫폼 코드
+    ├── db/                  ← PostgreSQL 데이터 (메타데이터·라벨)
+    └── compose.yaml, .env, CLAUDE.md, docs/, ...  ← 설정·문서
 ```
 
-**백업**: 시놀로지 Hyper Backup으로 이 두 폴더를 잡으면 된다. `db/`는 작지만
-반드시 포함해야 한다 — 없으면 라벨·이력이 사라진다.
+**컨테이너 볼륨 마운트는 절대경로 개별 마운트다** (`compose.yaml`은
+`03_Experiment` 안에 있고 데이터는 형제 폴더 `02_Dataset`에 있어서):
+```yaml
+volumes:
+  - ${DATASET_DIR:-/volume1/@appdata/.../01_BeepSound/02_Dataset}/uploads:/data/uploads
+  - ${DATASET_DIR:-...}/segments:/data/segments
+  - ${DATASET_DIR:-...}/exports:/data/exports
+```
+`db`는 `03_Experiment` 안에 있으므로 상대경로(`./db`) 그대로다.
+`01_Raw`(mic1·mic2)는 플랫폼이 알 필요 없어 마운트하지 않는다.
+
+**경로가 두 번 바뀐 이력**(전부 교수님 지시, 2026-08-27):
+`audio-platform`(코드+데이터 한 폴더) → `beep_sound_dataset`(연구원
+원본 폴더와 통합, `./data:/data` → 개별 마운트로 최초 분리) →
+`01_BeepSound/{01_Raw,02_Dataset,03_Experiment}`(3분할, 절대경로
+마운트로 전환). 상세는 docs/21 §5 항목25·29.
+
+**백업**: 시놀로지 Hyper Backup으로 `02_Dataset`(uploads·segments·
+exports)과 `03_Experiment/db`를 잡으면 된다. `db/`는 작지만 반드시
+포함해야 한다 — 없으면 라벨·이력이 사라진다. `01_Raw`(원본 녹음)도
+별도 백업 대상으로 챙길 것 — 이건 플랫폼이 관리하지 않는 연구원 직접
+보관 폴더다.
 
 ## 기존 Railway 데이터 옮기기
 
 지금까지 Drive에 쌓인 것을 NAS로 가져오려면:
 
 1. **오디오 파일**: Drive의 `audio_platform` 폴더를 통째로 내려받아
-   `/volume1/audio-platform/data/`에 넣는다 (하위 구조 그대로).
+   `02_Dataset/uploads/`, `02_Dataset/segments/`에 넣는다 (하위 구조
+   그대로 — dataset id별 폴더).
 2. **DB**: Railway에서 덤프 → NAS에서 복원
    ```bash
    # 로컬 PC에서
    railway run pg_dump --no-owner > dump.sql
-   # NAS로 파일 옮긴 뒤
-   docker compose -f docker-compose.nas.yml exec -T db \
+   # NAS로 파일 옮긴 뒤 (03_Experiment에서)
+   sudo docker compose exec -T db \
        psql -U audio audio_platform < dump.sql
    ```
 3. 확인: 프로젝트·세그먼트 수가 이전과 같은지 화면에서 대조한다.

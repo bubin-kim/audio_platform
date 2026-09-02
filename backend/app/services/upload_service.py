@@ -116,7 +116,7 @@ class UploadService:
                 )
             return dataset, False
         # 미지정 → 기본 Dataset 선택/자동생성 (결정 4).
-        return self.dataset_service.get_or_create_default(project_id)
+        return self.dataset_service.get_or_create_default(project_id, storage=self.storage)
 
     def _register_one(
         self,
