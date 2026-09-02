@@ -47,9 +47,13 @@ def get_dataset(dataset_id: int, db: Session = Depends(get_db)) -> DatasetRead:
     summary="데이터셋 이름 변경",
 )
 def rename_dataset(
-    dataset_id: int, body: DatasetUpdate, db: Session = Depends(get_db)
+    dataset_id: int,
+    body: DatasetUpdate,
+    db: Session = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage_dep),
 ) -> DatasetRead:
-    return DatasetRead.model_validate(DatasetService(db).rename(dataset_id, body.name))
+    dataset = DatasetService(db).rename(dataset_id, body.name, storage=storage)
+    return DatasetRead.model_validate(dataset)
 
 
 @router.get(

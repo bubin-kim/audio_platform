@@ -411,11 +411,19 @@ dB 스펙트로그램(mode=absolute)으로 실측:
 알아보기 쉽게 rename했더니, DB의 `storage_path`는 여전히 숫자 경로를
 가리켜 어긋나 `waveform`/`spectrogram` API가 전부 500(`soundfile.
 LibsndfileError: ... System error`, 실제로는 파일을 못 찾는 것)이 났다.
-`sources` 같은 DB 전용 조회는 영향 없어 원인 특정이 늦어졌다. **해결**:
-폴더명을 숫자로 원복. 폴더명에 사람이 읽는 이름을 안전하게 넣으려면
-`storage_path` 자체를 정본으로 삼아 코드를 고쳐야 한다 — 디스크에서 임의로
-폴더명을 바꾸면 항상 이 문제가 재발한다(다음에 겪으면 `data/uploads/`,
-`data/segments/` 아래 폴더가 전부 숫자인지부터 확인할 것).
+`sources` 같은 DB 전용 조회는 영향 없어 원인 특정이 늦어졌다. **1차 해결**:
+폴더명을 숫자로 원복.
+
+**근본 해결(2026-08-27)**: 폴더명 자체는 절대 안 바꾸고, dataset 생성·
+이름변경 시 `uploads/{id}`·`segments/{id}` 폴더 안에 `_dataset_info.txt`
+안내 파일을 자동 생성하도록 코드를 고쳤다(`DatasetService._write_folder_hint`,
+커밋 `12cd98d`). File Station에서 폴더를 열면 프로젝트/데이터셋 이름과
+"직접 바꾸지 마세요" 경고가 바로 보인다. 기존 8개 dataset(NAS 1~8)에도
+현재 이름 그대로 `PATCH /api/datasets/{id}`를 호출해 소급 적용, 실제
+파일 내용(`cat .../uploads/4/_dataset_info.txt`)으로 확인 완료. 이후
+폴더명을 다시 사람이 읽는 이름으로 바꾸고 싶은 유혹이 들면, **디스크에서
+직접 rename하지 말고 이 안내 파일만 참고할 것** — `data/uploads/`,
+`data/segments/` 아래 폴더는 항상 숫자 id 그대로 유지해야 한다.
 
 ## 2f. 평가 모듈 — 파라미터 판단의 기준 (2026-08-13)
 

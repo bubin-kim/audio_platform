@@ -96,7 +96,13 @@ class DatasetService:
         self.segment_repo = SegmentRepository(db)
         self.source_repo = SourceFileRepository(db)
 
-    def create(self, project_id: int, data: DatasetCreate) -> Dataset:
+    def create(
+        self,
+        project_id: int,
+        data: DatasetCreate,
+        *,
+        storage: StorageBackend | None = None,
+    ) -> Dataset:
         self._ensure_project(project_id)
         dataset = Dataset(
             project_id=project_id, name=data.name, version=data.version
@@ -104,6 +110,9 @@ class DatasetService:
         self.repo.add(dataset)
         self.db.commit()
         self.db.refresh(dataset)
+        if storage is not None:
+            project = self.project_repo.get(project_id)
+            self._write_folder_hint(storage, dataset, project.name if project else "")
         return dataset
 
     def get(self, dataset_id: int) -> Dataset:
@@ -112,13 +121,45 @@ class DatasetService:
             raise NotFoundError(f"Dataset {dataset_id}를 찾을 수 없습니다.")
         return dataset
 
-    def rename(self, dataset_id: int, name: str) -> Dataset:
-        """이름만 바꾼다 — 다른 원본이 섞여 들어간 뒤 구분용으로 재명명할 때(P1과 무관, 순수 정리)."""
+    def rename(
+        self, dataset_id: int, name: str, *, storage: StorageBackend | None = None
+    ) -> Dataset:
+        """이름만 바꾼다 — 다른 원본이 섞여 들어간 뒤 구분용으로 재명명할 때(P1과 무관, 순수 정리).
+
+        storage_path(uploads/{id}, segments/{id})는 절대 바꾸지 않는다 — id
+        기준 경로를 디스크에서 직접 rename하면 DB와 어긋나 파일을 못 찾게
+        된다(실사고: docs/17 §2l). 사람이 폴더 용도를 알아보게 하려면 이
+        안내 파일을 갱신하는 것으로 충분하다.
+        """
         dataset = self.get(dataset_id)
         dataset.name = name
         self.db.commit()
         self.db.refresh(dataset)
+        if storage is not None:
+            project = self.project_repo.get(dataset.project_id)
+            self._write_folder_hint(storage, dataset, project.name if project else "")
         return dataset
+
+    def _write_folder_hint(
+        self, storage: StorageBackend, dataset: Dataset, project_name: str
+    ) -> None:
+        """uploads/{id}·segments/{id} 폴더 안에 사람이 읽는 안내 파일을 둔다.
+
+        경로 자체(uploads/{id}/...)는 절대 바꾸지 않는다 — File Station에서
+        폴더명을 직접 rename하면 DB의 storage_path와 어긋나 waveform·
+        spectrogram API가 파일을 못 찾게 되는 사고가 실제로 있었다
+        (docs/17 §2l). 폴더를 열어보면 무엇인지 알 수 있는 정도로 충분하다.
+        """
+        content = (
+            f"project: {project_name}\n"
+            f"dataset: {dataset.name} (id={dataset.id}, version={dataset.version})\n"
+            "\n"
+            "이 폴더명을 직접 바꾸지 마세요 — 데이터베이스가 이 경로(숫자 id)를\n"
+            "그대로 참조하므로, 폴더명을 바꾸면 파형/스펙트로그램이 깨집니다.\n"
+            "데이터셋 이름은 플랫폼 화면에서 바꾸면 이 안내 파일이 자동 갱신됩니다.\n"
+        )
+        for prefix in ("uploads", "segments"):
+            storage.save(f"{prefix}/{dataset.id}/_dataset_info.txt", content.encode("utf-8"))
 
     def list_by_project(
         self, project_id: int, *, limit: int = 50, offset: int = 0

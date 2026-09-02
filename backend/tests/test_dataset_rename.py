@@ -87,3 +87,27 @@ def test_rename_dataset_rejects_empty_name(client: TestClient) -> None:
 
     r = client.patch(f"/api/datasets/{ds['id']}", json={"name": ""})
     assert r.status_code == 422
+
+
+def test_create_and_rename_write_folder_hint(client: TestClient, tmp_path: Path) -> None:
+    """생성·재명명 시 uploads/segments 폴더에 안내 파일이 남는다 (docs/17 §2l).
+
+    File Station에서 폴더명을 직접 rename하면 DB의 storage_path와 어긋나
+    waveform/spectrogram이 깨지는 사고가 있었다 — 폴더명 자체는 절대 안
+    바꾸고, 안내 파일로만 사람이 알아보게 한다.
+    """
+    pid = client.post("/api/projects", json=_project_payload()).json()["id"]
+    ds = client.post(f"/api/projects/{pid}/datasets", json={"name": "1일차"}).json()
+    ds_id = ds["id"]
+
+    for prefix in ("uploads", "segments"):
+        hint = tmp_path / "data" / prefix / str(ds_id) / "_dataset_info.txt"
+        assert hint.exists(), f"{prefix}/{ds_id}/_dataset_info.txt 가 생성되지 않았다"
+        text = hint.read_text(encoding="utf-8")
+        assert "1일차" in text
+        assert "폴더명을 직접 바꾸지 마세요" in text
+
+    client.patch(f"/api/datasets/{ds_id}", json={"name": "본녹음 1일차"})
+    for prefix in ("uploads", "segments"):
+        hint = tmp_path / "data" / prefix / str(ds_id) / "_dataset_info.txt"
+        assert "본녹음 1일차" in hint.read_text(encoding="utf-8")

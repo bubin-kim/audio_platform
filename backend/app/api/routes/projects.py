@@ -88,9 +88,12 @@ def delete_project(
     summary="데이터셋 생성",
 )
 def create_dataset(
-    project_id: int, body: DatasetCreate, db: Session = Depends(get_db)
+    project_id: int,
+    body: DatasetCreate,
+    db: Session = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage_dep),
 ) -> DatasetRead:
-    dataset = DatasetService(db).create(project_id, body)
+    dataset = DatasetService(db).create(project_id, body, storage=storage)
     return DatasetRead.model_validate(dataset)
 
 
