@@ -216,3 +216,26 @@ exports)과 `03_DashBoard/db`를 잡으면 된다. `db/`는 작지만 반드시
 - 커팅은 백그라운드로 돈다. DS925+ 쿼드코어면 3분 원본 1개에 1~2분 예상
   (Railway보다 빠를 가능성이 높다 — 파일을 내려받지 않으므로).
 - Railway·Vercel은 **당장 끄지 말고** NAS가 안정적으로 도는 것을 확인한 뒤 정리한다.
+
+### 함정: `up -d --build`만으로는 새 코드가 안 올라간다 (2026-09-02)
+
+scp로 파일을 보내고 `sudo docker compose up -d --build`를 돌렸는데도
+신규 API가 계속 404였다. 컨테이너는 `Started`로 뜨고 로그도 정상이라
+배포된 것처럼 보인다 — **이미지 레이어 캐시가 유효하면 재빌드를 건너뛴다.**
+
+```bash
+sudo docker compose up -d --build --force-recreate backend frontend
+```
+
+**판정은 로그가 아니라 API로 한다.** 로그 타임스탬프는 재시작해도
+과거 것이 그대로 보여 헷갈린다. 신규 엔드포인트를 직접 때려본다:
+
+```bash
+curl -s -H "Authorization: Bearer <토큰>" \
+  "http://203.247.33.93:8100/openapi.json" | grep -o 'band-waveform'
+```
+
+부수: macOS에서 만든 tar를 NAS에서 풀면
+`tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'`
+경고가 뜬다. **무해하다** — 애플 확장 속성일 뿐 파일은 정상적으로 풀린다.
+이걸 실패로 오인해 시간을 쓰지 말 것.
