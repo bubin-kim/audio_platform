@@ -9,7 +9,11 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from app.audio.band_beep_detector import detect_beep_onsets
+from app.audio.band_beep_detector import (
+    detect_beep_offsets,
+    detect_beep_onsets,
+    score_onset_tonality,
+)
 from app.audio.band_spectrogram import BandSpectrogramData, crop_band_spectrogram
 from app.audio.metadata import extract_metadata
 from app.audio.spectrogram import SpectrogramData, mel_spectrogram
@@ -183,8 +187,20 @@ class UploadService:
             "min_gap_sec": min_gap_sec,
             "period_sec": period_sec,
         }
-        onsets = detect_beep_onsets(self.storage.local_path(source.storage_path), params)
-        return summarize_onsets(onsets)
+        local = self.storage.local_path(source.storage_path)
+        onsets = detect_beep_onsets(local, params)
+        # offset(소리가 끝나는 시각) — onset과 짝을 이룬다.
+        # starts는 "소리가 실제로 시작한 시각"으로, 지속시간 계산에 쓴다
+        # (검출 onset이 톤 중간·끝에 찍히는 경우가 있어 그대로 빼면 틀린다).
+        offsets_end, starts = detect_beep_offsets(local, onsets, params)
+        # 주기 모드는 신호가 없어도 주기 수만큼 돌려주므로 순음성으로 검증한다.
+        tones = score_onset_tonality(local, onsets, params)
+        return summarize_onsets(
+            onsets,
+            offsets_end_sec=offsets_end,
+            sound_starts_sec=starts,
+            tonality_db=tones,
+        )
 
     def _resolve_dataset(
         self, project_id: int, dataset_id: int | None

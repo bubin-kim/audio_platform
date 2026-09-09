@@ -99,6 +99,21 @@ DEFAULTS: dict[str, Any] = {
     "period_search_sec": 0.6,
     # 접어서 위상을 찾을 때 쓰는 국소 배경 제거 창(초).
     "period_baseline_sec": 2.0,
+    # --- offset(소리가 끝나는 시각) 검출용 ---
+    # 엔벨로프가 피크의 몇 배까지 떨어지면 "끝"으로 볼지.
+    # 0.2 채택 근거는 detect_beep_offsets() docstring의 실측표 참조 —
+    # 0.5·0.3은 감쇠 중간을 끝으로 잡아 실제(~150ms)보다 훨씬 짧게 나오고
+    # 파일마다 26~128ms로 크게 흔들렸다.
+    "offset_end_frac": 0.2,
+    # onset 이후 이 시간 안에서만 끝을 찾는다(못 찾으면 여기서 끊는다).
+    "offset_max_sec": 2.0,
+    # 피크를 찾을 때 onset보다 **앞**을 얼마나 돌아볼지(초).
+    # onset이 톤 끝에 찍히는 경우를 살리려면 비프음 한 개 길이보다는
+    # 넉넉해야 하고(0.25로는 300ms 톤을 못 덮어 268ms로 짧게 측정됨),
+    # 반대로 너무 크면 onset 앞의 무관한 큰 소리를 피크로 잡아 offset이
+    # onset보다 앞서는 역전이 난다(실사고: search=2초일 때 58개 중 34개).
+    # 0.5초는 실측 비프음 길이(~190ms)의 2배 이상이면서 역전을 막는 값이다.
+    "offset_back_sec": 0.5,
 }
 
 
@@ -132,6 +147,13 @@ def validate_params(params: dict[str, Any]) -> None:
         raise ValueError("period_search_sec는 양수여야 합니다.")
     if float(_param(params, "period_baseline_sec")) <= 0:
         raise ValueError("period_baseline_sec는 양수여야 합니다.")
+    end_frac = float(_param(params, "offset_end_frac"))
+    if not 0 < end_frac < 1:
+        raise ValueError("offset_end_frac는 0과 1 사이여야 합니다.")
+    if float(_param(params, "offset_max_sec")) <= 0:
+        raise ValueError("offset_max_sec는 양수여야 합니다.")
+    if float(_param(params, "offset_back_sec")) < 0:
+        raise ValueError("offset_back_sec는 0 이상이어야 합니다.")
 
 
 def _moving_average(x: np.ndarray, win: int) -> np.ndarray:
@@ -201,10 +223,21 @@ def _detect_periodic(
     절차:
       1. 국소 배경(이동 median)을 빼 상승분만 남긴다 — 배경 드리프트가
          접기 결과를 흐리지 않게.
-      2. period_sec 단위로 잘라 겹쳐 평균낸다(folding). 신호는 매번 같은
-         위치에 쌓이고 잡음은 서로 상쇄된다.
+      2. period_sec 단위로 잘라 겹쳐 **중앙값**으로 누적한다(folding).
+         신호는 매번 같은 위치에 쌓이고 잡음은 서로 상쇄된다.
       3. 접은 곡선의 최대점 = 위상. 그 위상에서 ±search_sec 안의 실제
          최대점을 주기마다 하나씩 고른다.
+
+    **중앙값을 쓰는 이유**(실측 2026-09-02, `260818_030.WAV`): 평균으로
+    접으면 **몇 주기에만 있는 큰 소리 하나가 전체 위상을 끌어간다.**
+    이 파일은 1.8초·51.8초에 비프음이 아닌 큰 소리(정규화 1.000·0.903)가
+    있었고, 나머지 8주기의 같은 위상은 0.18~0.50으로 약했는데도 평균이
+    그쪽을 최대로 만들어 **위상을 1.83초로 오판**했다(실제 비프음은 5.8초
+    근방 — 사용자 청취로 확인). 같은 데이터를 중앙값으로 접으면 위상
+    1.8(0.332) < 5.8(0.385)로 순서가 뒤집힌다.
+
+    중앙값은 "주기의 절반 이상에서 큰 위치"를 고르므로, 소수 주기의
+    이상치에 흔들리지 않는다.
     """
     base = ndimage.median_filter(
         envelope, size=int(sr * baseline_sec) | 1, mode="nearest"
@@ -216,7 +249,7 @@ def _detect_periodic(
     if period <= 0 or cycles < 2:
         return []
 
-    folded = rise[: cycles * period].reshape(cycles, period).mean(axis=0)
+    folded = np.median(rise[: cycles * period].reshape(cycles, period), axis=0)
     phase_idx = int(np.argmax(folded))
 
     half = max(1, int(search_sec * sr))
@@ -304,3 +337,153 @@ def detect_beep_onsets(path: Path, params: dict[str, Any] | None = None) -> list
         ]
 
     return [round(float(p / sr), 3) for p in peaks]
+
+
+def detect_beep_offsets(
+    path: Path,
+    onsets: list[float],
+    params: dict[str, Any] | None = None,
+) -> tuple[list[float], list[float]]:
+    """각 onset에 대응하는 **offset(소리가 끝나는 시각, 초)**을 찾는다.
+
+    onset은 "소리가 시작하는 순간", offset은 "소리가 멈추는 순간"이다
+    (오디오 표준 용어). 기존 `verify_onsets.summarize_onsets`가 쓰는
+    `offsets_sec` 필드는 이름과 달리 `onset % period`(주기 안 위치=위상)
+    이므로 **이 함수와 다른 개념**이다 — 혼동하지 말 것.
+
+    방법: onset 지점의 대역 엔벨로프 피크를 기준으로, 엔벨로프가
+    `base + (peak-base) * end_frac`까지 떨어지는 첫 지점을 끝으로 본다.
+
+    **end_frac=0.2 채택 근거(실측 2026-09-02, NAS 세그먼트 6개)**:
+      | 기준 | 지속시간 중앙값 | 파일 간 편차 |
+      |---|---|---|
+      | 50% | 30ms | 26~36ms (톤 중간에서 잘림) |
+      | 30% | 44ms | 35~128ms (들쭉날쭉) |
+      | **20%** | **130ms** | **125~185ms (일관됨)** |
+      비프음 실제 길이(~150ms)와 맞는 것은 20%뿐이었다. 50%/30%는
+      감쇠 중간을 끝으로 잡아 실제보다 짧고 파일마다 크게 흔들린다.
+
+    Returns:
+        `(offsets, starts)` — 둘 다 onsets와 같은 길이.
+        - offsets: 소리가 끝나는 시각
+        - starts: 소리가 **실제로 시작한** 시각(임계값을 넘어선 첫 지점)
+
+    `starts`를 함께 돌려주는 이유: 검출된 onset이 톤의 시작이 아니라
+    중간·끝에 찍히는 경우가 있어(실측: 심은 5.000~5.150 톤에서 onset이
+    5.138), `offset - onset`으로 지속시간을 재면 18ms처럼 엉뚱한 값이
+    나온다. 지속시간은 **starts 기준**으로 계산해야 한다.
+    """
+    params = params or {}
+    validate_params(params)
+    if not onsets:
+        return []
+
+    samples, sr = sf.read(str(path), dtype="float32", always_2d=True)
+    if samples.shape[0] == 0:
+        return []
+
+    mono = to_mono(samples, sr, channel="mean").samples.astype(np.float64)
+    lo = float(_param(params, "band_low_hz"))
+    hi = float(_param(params, "band_high_hz"))
+    nyq = sr / 2
+    hi = min(hi, nyq * 0.99)
+    if lo >= hi:
+        return []
+
+    sos = sig.butter(4, [lo, hi], btype="bandpass", fs=sr, output="sos")
+    env = np.abs(sig.hilbert(sig.sosfiltfilt(sos, mono)))
+    win = max(1, int(float(_param(params, "smooth_ms")) / 1000.0 * sr))
+    if win > 1:
+        env = np.convolve(env, np.ones(win) / win, mode="same")
+
+    end_frac = float(_param(params, "offset_end_frac"))
+    search = float(_param(params, "offset_max_sec"))
+    base = float(np.median(env))
+    total_sec = len(env) / sr
+
+    offsets: list[float] = []
+    starts: list[float] = []
+    for onset in onsets:
+        i0 = int(onset * sr)
+        if i0 >= len(env):
+            offsets.append(round(total_sec, 3))
+            starts.append(round(onset, 3))
+            continue
+        # 피크는 onset **앞뒤**에서 찾는다 — 검출된 onset이 톤의 시작이
+        # 아니라 **끝부분**에 찍히는 경우가 있다(실측: 심은 5.000~5.150
+        # 톤에서 onset이 5.138로 잡혀, 20ms 뒤 소리가 끝나 지속시간이
+        # 18ms로 나왔다). onset 이후만 보면 이 경우를 못 살린다.
+        #
+        # 단, 뒤로 돌아보는 범위는 **비프음 한 개 길이**(back_sec)로 제한한다.
+        # search(=offset_max_sec, 기본 2초)만큼 돌아보면 온셋 앞의 무관한
+        # 큰 소리를 피크로 잡아 **offset이 onset보다 앞서는 역전**이 난다
+        # (실사고 2026-09-02: 58개 원본 중 34개에서 최대 1.96초 역전).
+        back_sec = float(_param(params, "offset_back_sec"))
+        pk_lo = max(0, i0 - int(back_sec * sr))
+        pk_hi = min(len(env), i0 + int(search * sr))
+        if pk_hi <= pk_lo:
+            offsets.append(round(onset, 3))
+            starts.append(round(onset, 3))
+            continue
+        peak = float(env[pk_lo:pk_hi].max())
+        threshold = base + (peak - base) * end_frac
+        i_peak = pk_lo + int(np.argmax(env[pk_lo:pk_hi]))
+
+        # 소리의 **시작**(임계값을 넘어선 첫 지점)까지 거슬러 올라간 뒤,
+        # 거기서부터 끝을 찾는다. 그래야 onset이 톤 어디에 찍혔든
+        # 같은 구간(=진짜 소리 구간)을 재게 된다.
+        i_start = i_peak
+        while i_start > pk_lo and env[i_start - 1] > threshold:
+            i_start -= 1
+
+        limit = min(len(env) - 1, i_start + int(search * sr))
+        i = i_peak
+        while i < limit and env[i] > threshold:
+            i += 1
+        # 불변식: offset은 onset보다 뒤여야 한다. 위 탐색이 어떤 이유로든
+        # 앞선 값을 내놓아도 여기서 막는다(표시 계약을 코드로 보장).
+        end_sec = max(i / sr, onset)
+        offsets.append(round(end_sec, 3))
+        starts.append(round(min(i_start / sr, onset), 3))
+
+    return offsets, starts
+
+
+def score_onset_tonality(
+    path: Path,
+    onsets: list[float],
+    params: dict[str, Any] | None = None,
+) -> list[float]:
+    """각 onset 지점의 **순음성(dB)** — 진짜 비프음인지 사후 검증용.
+
+    주기 모드(`_detect_periodic`)는 임계값을 쓰지 않고 주기 창마다 최대점을
+    하나씩 고르므로, **신호가 없어도 항상 주기 수만큼 돌려준다.** 위상
+    표준편차도 구조상 작게 나와, 그것만으로는 "진짜를 찾았는지"를 가릴 수
+    없다(실사고 2026-09-02: `260818_030.WAV`가 위상 sd 0.243으로 정상처럼
+    보였으나 실제로는 배경 소음을 찍고 있었다 — 사용자 청취로 발각).
+
+    그래서 찾은 지점마다 스펙트럼을 보고 "좁은 대역에 몰린 순음인가"를
+    따로 잰다. 실측 기준(NAS 1일차):
+      - 진짜 비프음: **15~25dB** (031: 15.7~25.5)
+      - 배경 소음:   **0~13dB**  (030: 0.9~12.7)
+    `tonality_db`(기본 14) 미만이면 그 지점은 비프음이 아닐 가능성이 높다.
+
+    임계값 모드는 검출 단계에서 이미 이 필터를 통과시키므로 보통 높게 나온다.
+    """
+    params = params or {}
+    validate_params(params)
+    if not onsets:
+        return []
+
+    samples, sr = sf.read(str(path), dtype="float32", always_2d=True)
+    if samples.shape[0] == 0:
+        return []
+
+    mono = to_mono(samples, sr, channel="mean").samples.astype(np.float64)
+    lo = float(_param(params, "band_low_hz"))
+    hi = float(_param(params, "band_high_hz"))
+    win = float(_param(params, "tonality_win_sec"))
+
+    return [
+        round(_tonality_db(mono, sr, float(t), lo, hi, win), 2) for t in onsets
+    ]

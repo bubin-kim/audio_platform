@@ -61,10 +61,21 @@ class BeepOnsetsRead(BaseModel):
 
     count: int
     onsets_sec: list[float]
+    # 주의: `offsets_sec`는 이름과 달리 **위상**(onset % period)이다.
+    # 오디오 표준 용어의 offset(소리가 끝나는 시각)은 `offsets_end_sec`.
     offsets_sec: list[float]
     offset_median_sec: float | None
     offset_stddev_sec: float
     gaps_sec: list[float]
+    offsets_end_sec: list[float] = []
+    durations_sec: list[float] = []
+    duration_median_sec: float | None = None
+    # 지점별 순음성(dB) — 진짜 비프음 15~25, 배경 소음 0~13 (실측)
+    tonality_db: list[float] = []
+    tonality_median_db: float | None = None
+    weak_count: int = 0
+    #: False면 배경 소음을 찍고 있을 가능성이 높다 — 사람이 확인해야 한다
+    looks_real: bool = True
 
 
 class BandWaveformRead(BaseModel):

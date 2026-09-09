@@ -158,6 +158,9 @@ def test_defaults_have_no_domain_branching() -> None:
         "period_sec",
         "period_search_sec",
         "period_baseline_sec",
+        "offset_end_frac",
+        "offset_max_sec",
+        "offset_back_sec",
     }
 
 

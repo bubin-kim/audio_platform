@@ -41,7 +41,15 @@ def _circular_stddev(offsets: list[float], period_sec: float) -> float:
     return math.sqrt(-2 * math.log(r)) * period_sec / (2 * math.pi)
 
 
-def summarize_onsets(onsets: list[float], *, period_sec: float = 10.0) -> dict[str, Any]:
+def summarize_onsets(
+    onsets: list[float],
+    *,
+    period_sec: float = 10.0,
+    offsets_end_sec: list[float] | None = None,
+    sound_starts_sec: list[float] | None = None,
+    tonality_db: list[float] | None = None,
+    tonality_min_db: float = 14.0,
+) -> dict[str, Any]:
     """onset 리스트의 개수·오프셋 분포·간격을 요약한다.
 
     onsets는 오름차순이 아니어도 되며(정렬해서 처리), 빈 리스트도 허용한다
@@ -51,7 +59,23 @@ def summarize_onsets(onsets: list[float], *, period_sec: float = 10.0) -> dict[s
     근처여도 올바르게 판정한다.
     """
     sorted_onsets = sorted(onsets)
+    # 주의: 아래 `offsets`는 **위상**(onset % period)이다. 오디오 표준
+    # 용어의 offset(소리가 끝나는 시각)은 `offsets_end_sec`로 따로 받는다.
     offsets = [round(t % period_sec, 3) for t in sorted_onsets]
+    ends = list(offsets_end_sec or [])
+    # 지속시간은 **소리가 실제로 시작한 시각** 기준으로 잰다. 검출 onset은
+    # 톤의 중간·끝에 찍히는 경우가 있어(실측: 심은 5.000~5.150 톤에서
+    # onset 5.138) `end - onset`으로 계산하면 18ms처럼 엉뚱하게 나온다.
+    starts = list(sound_starts_sec or sorted_onsets)
+    durations = [
+        round(e - s, 3) for s, e in zip(starts, ends) if e > s
+    ]
+    # 순음성 — 주기 모드는 신호가 없어도 주기 수만큼 돌려주므로, 개수·위상
+    # 만으로는 진짜를 찾았는지 알 수 없다. 지점별 순음성으로 사후 검증한다.
+    tones = list(tonality_db or [])
+    weak = sum(1 for t in tones if t < tonality_min_db)
+    # 절반 이상이 기준 미달이면 "이 파일은 검출 실패"로 본다.
+    looks_real = bool(tones) and weak <= len(tones) / 2
     gaps = [
         round(b - a, 3) for a, b in zip(sorted_onsets, sorted_onsets[1:])
     ]
@@ -63,4 +87,11 @@ def summarize_onsets(onsets: list[float], *, period_sec: float = 10.0) -> dict[s
         "offset_median_sec": round(median(offsets), 3) if offsets else None,
         "offset_stddev_sec": round(_circular_stddev(offsets, period_sec), 3),
         "gaps_sec": gaps,
+        "offsets_end_sec": ends,
+        "durations_sec": durations,
+        "duration_median_sec": round(median(durations), 3) if durations else None,
+        "tonality_db": tones,
+        "tonality_median_db": round(median(tones), 2) if tones else None,
+        "weak_count": weak,
+        "looks_real": looks_real,
     }
