@@ -200,24 +200,19 @@ export function SourceWaveform({
   return (
     <div style={{ width: band ? width + HZ_AXIS_PX : width }}>
       {/* band 모드에서는 아래 스펙트로그램의 Hz 축과 **같은 폭**의 축을 둔다.
-          파형의 세로축은 주파수가 아니라 진폭이므로 Hz 눈금을 찍을 수 없다 —
-          대신 어느 대역을 걸러낸 파형인지를 세로로 적고, 진폭 눈금(정규화
-          0~1, 중앙 기준 ±)을 찍는다. 스펙트로그램과 왼쪽 폭이 같아야
-          두 그림의 시간축이 세로로 맞는다(HZ_AXIS_PX 공유). */}
+          단, 파형의 세로축은 **주파수가 아니라 진폭**이다 — 스펙트로그램처럼
+          1600~2400Hz를 세로에 찍으면 "가운데 봉우리 = 2000Hz"로 잘못 읽힌다.
+          그래서 이 축에는 눈금 대신 **어느 대역을 걸러낸 파형인지**만 적는다.
+          스펙트로그램과 왼쪽 폭이 같아야 시간축이 맞는다(HZ_AXIS_PX 공유). */}
       {band ? (
         <div className="flex items-start gap-1">
           <div
             className="relative shrink-0 text-right text-[10px] leading-none text-content-subtle"
             style={{ width: HZ_AXIS_PX - 4, height }}
           >
-            <span className="absolute right-0 top-0 tabular-nums">1.0</span>
-            <span
-              className="absolute right-0 tabular-nums"
-              style={{ top: "50%", transform: "translateY(-50%)" }}
-            >
-              0
-            </span>
-            <span className="absolute right-0 bottom-0 tabular-nums">1.0</span>
+            {/* 진폭 눈금(1.0/0/1.0)은 두지 않는다 — 정규화값이라 단위가 없고,
+                위아래가 같은 숫자라 Hz 눈금처럼 읽혀 오해를 부른다.
+                실제 진폭은 아래 캡션의 peak_abs로 안내한다. */}
             <span
               className="absolute whitespace-nowrap font-medium text-content-muted"
               style={{
@@ -225,8 +220,9 @@ export function SourceWaveform({
                 top: "50%",
                 transform: "translate(-50%, -50%) rotate(-90deg)",
               }}
+              title={`${bandLabel} 대역만 남긴 파형 — 세로는 진폭(주파수 아님)`}
             >
-              {bandLabel}
+              {bandLabel} 진폭
             </span>
           </div>
           {canvas}

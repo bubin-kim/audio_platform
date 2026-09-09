@@ -145,6 +145,11 @@ export interface BeepOnsets {
   offset_median_sec: number | null;
   offset_stddev_sec: number;
   gaps_sec: number[];
+  /** 진짜 offset — 소리가 끝나는 시각(초). onsets_sec와 짝을 이룬다. */
+  offsets_end_sec: number[];
+  /** 각 비프음 지속시간(초) = 소리 끝 − 소리 시작. */
+  durations_sec: number[];
+  duration_median_sec: number | null;
 }
 
 // --- Upload ---

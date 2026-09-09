@@ -13,8 +13,8 @@ import config from "@/tailwind.config";
  * 별개 컴포넌트·별개 API — 그쪽 로직은 이 파일이 전혀 건드리지 않는다.
  *
  * 대역통과 기반 비프음 검출(band_beep_detector.py) 결과를 빨간 세로선으로
- * 겹쳐 그리고, 검출 검증 통계(개수·오프셋·간격)를 텍스트로 함께 보여준다 —
- * 오프셋이 5초 근방에 몰려 있고 표준편차가 작으면 검출이 맞았다는 신호,
+ * 겹쳐 그리고, 검출 검증 통계(개수·위상·간격)를 텍스트로 함께 보여준다 —
+ * 위상이 한 값 근방에 몰려 있고 표준편차가 작으면 검출이 맞았다는 신호,
  * 흩어져 있으면 파라미터(k·대역폭)를 의심하라는 신호(녹음 설계: 초의
  * 일의 자리 5초에 키를 눌렀으므로 onset % 10 ≈ 5초여야 한다).
  */
@@ -149,7 +149,7 @@ export function SourceBandSpectrogram({
   const secToX = (sec: number) => (sec / spec.duration_sec) * width;
 
   // 판정: 주기 모드는 주기 수만큼 항상 돌려주므로 개수보다 **위상 일관성**이
-  // 중요하다. 오프셋 표준편차가 작으면 진짜 비프음을 따라간 것이고, 크면
+  // 중요하다. 위상 표준편차가 작으면 진짜 비프음을 따라간 것이고, 크면
   // 주기 위상을 못 찾아 엉뚱한 곳을 짚고 있다는 신호(실측: 정상 파일들은
   // 0.08~0.27초, 실패한 파일은 3.7초).
   const consistent = onsets.offset_stddev_sec <= 0.5;
@@ -251,15 +251,41 @@ export function SourceBandSpectrogram({
             ? "규칙적 — 검출 정상으로 보임"
             : "위상이 흔들림 — 이 파일은 사람이 직접 확인 필요"}
         </div>
+        {/* 온셋(원본에서의 실제 시각)을 먼저 보여준다 — 검수자가 그 지점을
+            찾아 들어야 하므로 "5.87초"처럼 절대 시각이 필요하다.
+
+            아래 줄은 API 필드명이 `offsets_sec`지만 실제 계산은
+            `onset % period_sec` = **주기 안에서의 위치(위상)**다.
+            오디오에서 offset은 "소리가 끝나는 순간"을 뜻하므로 그 이름으로
+            표시하면 오해를 부른다 — 화면에는 **위상**으로 적는다. */}
         <div className="mt-1 tabular-nums text-content-subtle">
-          오프셋(초%10): [{onsets.offsets_sec.map((v) => v.toFixed(2)).join(", ")}]
+          온셋(소리 시작 시각):{" "}
+          {onsets.onsets_sec.map((v) => `${v.toFixed(2)}초`).join(" · ")}
         </div>
         <div className="mt-1 tabular-nums text-content-subtle">
-          오프셋 중앙값 {onsets.offset_median_sec?.toFixed(3) ?? "—"}초 · 표준편차{" "}
+          오프셋(소리 끝 시각):{" "}
+          {onsets.offsets_end_sec.length > 0
+            ? onsets.offsets_end_sec.map((v) => `${v.toFixed(2)}초`).join(" · ")
+            : "—"}
+        </div>
+        <div className="mt-1 tabular-nums text-content-subtle">
+          지속시간:{" "}
+          {onsets.durations_sec.length > 0
+            ? `${onsets.durations_sec
+                .map((v) => `${(v * 1000).toFixed(0)}ms`)
+                .join(" · ")} (중앙 ${((onsets.duration_median_sec ?? 0) * 1000).toFixed(0)}ms)`
+            : "—"}
+        </div>
+        <div className="mt-1 tabular-nums text-content-subtle">
+          위상(10초 주기 안 위치):{" "}
+          {onsets.offsets_sec.map((v) => `${v.toFixed(2)}초`).join(" · ")}
+        </div>
+        <div className="mt-1 tabular-nums text-content-subtle">
+          위상 중앙값 {onsets.offset_median_sec?.toFixed(3) ?? "—"}초 · 표준편차{" "}
           {onsets.offset_stddev_sec.toFixed(3)}초
         </div>
         <div className="mt-1 tabular-nums text-content-subtle">
-          간격: [{onsets.gaps_sec.map((v) => v.toFixed(2)).join(", ")}]
+          간격: {onsets.gaps_sec.map((v) => `${v.toFixed(2)}초`).join(" · ")}
         </div>
       </div>
     </div>
