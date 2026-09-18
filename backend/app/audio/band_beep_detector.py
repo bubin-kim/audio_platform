@@ -107,6 +107,20 @@ DEFAULTS: dict[str, Any] = {
     "offset_end_frac": 0.2,
     # onset 이후 이 시간 안에서만 끝을 찾는다(못 찾으면 여기서 끊는다).
     "offset_max_sec": 2.0,
+    # --- 빔포밍 (앰비소닉 4채널을 방향 지향으로 합성) ---
+    # "auto"면 타겟 대역 에너지가 가장 큰 방향을 찾아 그 방향만 듣는다.
+    # None/""이면 기존 4채널 평균(mean)을 쓴다.
+    #
+    # 실측 근거(2026-09-14, NAS 실데이터):
+    #   4일차 약한 신호 30개 — SNR 중앙 19.2dB(평균) → 21.5dB(빔포밍),
+    #   30개 중 26개 개선, 최대 +6.3dB.
+    #   "검출 실패" 판정 40개 재검사 — 21개(52%)가 검출 성공으로 전환.
+    # W 채널 단독은 실데이터에서 평균보다 나빴다(-2.3dB) — 채택하지 않음.
+    "beam": None,
+    # 방향 탐색 간격(도). 작을수록 정밀하지만 느리다.
+    "beam_step_deg": 30.0,
+    # 지향 패턴. cardioid(심장형)가 무난하다.
+    "beam_pattern": "cardioid",
     # 피크를 찾을 때 onset보다 **앞**을 얼마나 돌아볼지(초).
     # onset이 톤 끝에 찍히는 경우를 살리려면 비프음 한 개 길이보다는
     # 넉넉해야 하고(0.25로는 300ms 톤을 못 덮어 268ms로 짧게 측정됨),
@@ -154,6 +168,46 @@ def validate_params(params: dict[str, Any]) -> None:
         raise ValueError("offset_max_sec는 양수여야 합니다.")
     if float(_param(params, "offset_back_sec")) < 0:
         raise ValueError("offset_back_sec는 0 이상이어야 합니다.")
+    beam = _param(params, "beam")
+    if beam not in (None, "", "auto"):
+        try:
+            float(beam)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"beam은 None/'auto'/방위각(도) 이어야 합니다. 받은 값: {beam!r}"
+            ) from None
+    if float(_param(params, "beam_step_deg")) <= 0:
+        raise ValueError("beam_step_deg는 양수여야 합니다.")
+
+
+def _to_analysis_mono(
+    samples: np.ndarray, sr: int, params: dict[str, Any]
+) -> np.ndarray:
+    """분석용 모노 신호 — 기본은 4채널 평균, `beam` 지정 시 빔포밍.
+
+    저장되는 세그먼트는 **항상 원본 4채널 그대로**다. 이 함수는 검출·판정에
+    쓸 신호를 만들 뿐이며, 오디오 파일을 변형하지 않는다.
+    """
+    beam = _param(params, "beam")
+    if not beam or samples.shape[1] < 4:
+        return to_mono(samples, sr, channel="mean").samples.astype(np.float64)
+
+    # 순환 import 방지 — 빔포밍은 선택 기능이라 필요할 때만 로드한다.
+    from app.audio.ambisonic_beam import beamform, scan_best_azimuth
+
+    pattern = str(_param(params, "beam_pattern"))
+    lo = float(_param(params, "band_low_hz"))
+    hi = float(_param(params, "band_high_hz"))
+
+    if beam == "auto":
+        az, _ = scan_best_azimuth(
+            samples, sr, band=(lo, hi),
+            step_deg=float(_param(params, "beam_step_deg")),
+            pattern=pattern,
+        )
+    else:
+        az = float(beam)
+    return beamform(samples, az, pattern=pattern)
 
 
 def _moving_average(x: np.ndarray, win: int) -> np.ndarray:
@@ -276,7 +330,7 @@ def detect_beep_onsets(path: Path, params: dict[str, Any] | None = None) -> list
     if samples.shape[0] == 0:
         return []
 
-    mono = to_mono(samples, sr, channel="mean").samples.astype(np.float64)
+    mono = _to_analysis_mono(samples, sr, params)
 
     lo = float(_param(params, "band_low_hz"))
     hi = float(_param(params, "band_high_hz"))
@@ -382,7 +436,7 @@ def detect_beep_offsets(
     if samples.shape[0] == 0:
         return []
 
-    mono = to_mono(samples, sr, channel="mean").samples.astype(np.float64)
+    mono = _to_analysis_mono(samples, sr, params)
     lo = float(_param(params, "band_low_hz"))
     hi = float(_param(params, "band_high_hz"))
     nyq = sr / 2
@@ -479,7 +533,7 @@ def score_onset_tonality(
     if samples.shape[0] == 0:
         return []
 
-    mono = to_mono(samples, sr, channel="mean").samples.astype(np.float64)
+    mono = _to_analysis_mono(samples, sr, params)
     lo = float(_param(params, "band_low_hz"))
     hi = float(_param(params, "band_high_hz"))
     win = float(_param(params, "tonality_win_sec"))

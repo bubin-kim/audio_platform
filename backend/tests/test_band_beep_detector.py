@@ -161,6 +161,9 @@ def test_defaults_have_no_domain_branching() -> None:
         "offset_end_frac",
         "offset_max_sec",
         "offset_back_sec",
+        "beam",
+        "beam_step_deg",
+        "beam_pattern",
     }
 
 

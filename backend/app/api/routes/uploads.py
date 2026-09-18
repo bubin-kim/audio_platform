@@ -209,6 +209,7 @@ def get_source_beep_onsets(
     k_global: float | None = Query(None, ge=0, description="전역 하한 배수(경계 오탐 방어), 0이면 끔. 생략 시 기본값"),
     min_gap_sec: float | None = Query(None, gt=0, description="피크 간 최소 간격(초), 생략 시 기본값"),
     period_sec: float | None = Query(None, ge=0, description="비프음 주기(초). 주면 임계값 대신 주기 누적으로 찾는다 — 약한 신호에 훨씬 강함. 0/생략이면 임계값 방식"),
+    beam: str | None = Query(None, description="앰비소닉 빔포밍. 'auto'면 타겟 대역이 가장 센 방향을 찾아 그 방향만 듣는다(소음 억제). 방위각(도)을 직접 줄 수도 있다. 생략하면 4채널 평균"),
     db: Session = Depends(get_db),
     storage: StorageBackend = Depends(get_storage_dep),
 ) -> BeepOnsetsRead:
@@ -217,6 +218,7 @@ def get_source_beep_onsets(
         band_low_hz=band_low_hz, band_high_hz=band_high_hz,
         k=k, k_global=k_global, min_gap_sec=min_gap_sec,
         period_sec=period_sec,
+        beam=beam,
     )
     response.headers["Cache-Control"] = "private, max-age=3600"
     return BeepOnsetsRead(**summary)
